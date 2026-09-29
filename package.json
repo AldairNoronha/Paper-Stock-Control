@@ -5,7 +5,7 @@
   "packageManager": "pnpm@12.8.1",
   "scripts": {
     "dev:web": "pnpm --filter @paper-stock/web dev",
-    "dev:api": "python -m uvicorn app.main:app --reload --app-dir apps/api",
+    "dev:api": "python -m uvicorn app.main:app --reload --app-dir apps/api --host 0.0.0.0 --port 8000",
     "lint": "pnpm --filter @paper-stock/web lint && python -m ruff check apps/api",
     "typecheck": "pnpm --filter @paper-stock/web typecheck && python -m mypy apps/api/app apps/api/scripts",
     "test": "pnpm --filter @paper-stock/web test && python -m pytest apps/api/tests",

@@ -8,6 +8,21 @@
 4. Execute `pnpm db:upgrade`.
 5. Inicie API e web.
 
+## Teste pelo celular na rede local
+
+API e Vite escutam em todas as interfaces de rede. Descubra o IPv4 do computador com
+`ipconfig`, substitua `localhost` por esse endereço em `VITE_API_BASE_URL` e acrescente
+`http://<IP>:5173` em `CORS_ORIGINS`. Depois execute:
+
+```powershell
+pnpm dev:api
+pnpm dev:web
+```
+
+Com o celular na mesma rede Wi-Fi, abra `http://<IP>:5173`. O endereço pode mudar
+quando o computador reconectar à rede. Se a página não abrir, autorize Node/Python nas
+regras de entrada do Firewall do Windows para a rede atual.
+
 ## Diagnóstico
 
 - `GET /api/v1/health/live` prova que o processo da API está vivo.
@@ -20,4 +35,3 @@ O reset do Supabase remove dados locais. Antes de executá-lo, confirme que o pr
 selecionado é o ambiente local. Depois do reset, aplique novamente `pnpm db:upgrade`.
 
 Não use comandos de reset em produção.
-
