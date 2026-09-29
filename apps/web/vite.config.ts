@@ -3,6 +3,7 @@ import { defineConfig } from 'vitest/config';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
+  base: process.env.GITHUB_ACTIONS === 'true' ? '/Paper-Stock-Control/' : '/',
   plugins: [
     react(),
     VitePWA({
@@ -15,10 +16,10 @@ export default defineConfig({
         theme_color: '#173f35',
         background_color: '#f2f5f2',
         display: 'standalone',
-        start_url: '/',
+        start_url: './',
         icons: [
           {
-            src: '/icon.svg',
+            src: 'icon.svg',
             sizes: 'any',
             type: 'image/svg+xml',
             purpose: 'any maskable'
@@ -36,4 +37,3 @@ export default defineConfig({
     setupFiles: './src/test/setup.ts'
   }
 });
-
