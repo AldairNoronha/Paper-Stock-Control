@@ -4,7 +4,22 @@ Sistema independente para controle e rastreabilidade de papel melamínico por pa
 
 As Fases 1 e 2 estão implementadas: fundação React/FastAPI/Supabase e núcleo
 transacional de estoque com autenticação, RBAC, idempotência, rotação, auditoria e
-testes concorrentes. A captura e leitura automática de etiquetas pertence à Fase 3.
+testes concorrentes. A Fase 3A entrega um piloto móvel de leitura local de etiquetas.
+
+## Piloto móvel de leitura (Fase 3A)
+
+Abra <https://aldairnoronha.github.io/Paper-Stock-Control/> no celular. O piloto:
+
+- abre a câmera traseira ou uma foto já existente;
+- rejeita imagens muito pequenas, escuras, estouradas ou desfocadas;
+- procura QR Code e códigos de barras com ZXing;
+- executa OCR em português no próprio navegador com Tesseract.js;
+- aplica parsers específicos para Impress, Schattdecor e Interprint;
+- mostra origem e confiança por campo, valida a área e permite correção manual;
+- salva a aprovação somente como rascunho local no aparelho.
+
+Neste piloto a foto não é enviada ao servidor, a aprovação não cria pallet e não altera
+estoque. A persistência será conectada quando a API FastAPI estiver hospedada em HTTPS.
 
 ## Arquitetura
 
