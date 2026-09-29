@@ -1,0 +1,40 @@
+{
+  "impress": {
+    "qr": "90113 UNICOLOR  IP420 2760x1860mm;0;820;E-102893/010-15-I-01;05.09.2026 19:07;04/12/26",
+    "sscc": "378989959000364088",
+    "quantity_sheets": 820,
+    "width_mm": 1860,
+    "length_mm": 2760,
+    "declared_area_m2": 4209.55,
+    "calculated_area_m2": 4209.552,
+    "status": "verified_from_sample"
+  },
+  "schattdecor_qr_sample": {
+    "qr": "ASFALTO|D009247968|800 |1865 |2765 |4125.38 |superior|",
+    "quantity_sheets": 800,
+    "width_mm": 1865,
+    "length_mm": 2765,
+    "declared_area_m2": 4125.38,
+    "status": "text_sample_not_same_pallet_as_photo"
+  },
+  "schattdecor_photo_sample": {
+    "material": "CONVÉS",
+    "lot": "D009247388",
+    "quantity_sheets": 850,
+    "width_mm": 1865,
+    "length_mm": 2765,
+    "declared_area_m2": 4383.22,
+    "calculated_area_m2": 4383.216,
+    "status": "verified_from_sample"
+  },
+  "interprint": {
+    "material": "FREIJÓ TUCUMÃ",
+    "lot": "8081196011",
+    "quantity_sheets": 1060,
+    "width_mm": 1865,
+    "length_mm": 2765,
+    "declared_area_m2": 5466.32,
+    "calculated_area_m2": 5466.128,
+    "status": "needs_physical_validation"
+  }
+}

@@ -1,0 +1,2 @@
+"""Supplier and material catalog."""
+

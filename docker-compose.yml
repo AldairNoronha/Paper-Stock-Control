@@ -1,0 +1,31 @@
+services:
+  api:
+    build:
+      context: ./apps/api
+    command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      APP_ENV: development
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@host.docker.internal:54322/postgres
+      CORS_ORIGINS: http://localhost:5173
+      SUPABASE_URL: http://host.docker.internal:54321
+      SUPABASE_JWKS_URL: http://host.docker.internal:54321/auth/v1/.well-known/jwks.json
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./apps/api/app:/app/app
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: development
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000/api/v1
+      VITE_SUPABASE_URL: http://127.0.0.1:54321
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./apps/web/src:/workspace/apps/web/src
+

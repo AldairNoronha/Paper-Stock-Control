@@ -1,0 +1,2 @@
+"""Paper Stock Control API."""
+
