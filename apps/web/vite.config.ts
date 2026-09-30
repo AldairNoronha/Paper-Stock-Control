@@ -7,7 +7,11 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      // Keep the existing activation policy for phones on old releases.
+      // AppUpdate registers it and asks before reloading the open form.
       registerType: 'autoUpdate',
+      injectRegister: false,
+      workbox: { clientsClaim: true },
       includeAssets: ['icon.svg'],
       manifest: {
         name: 'Paper Stock Control',

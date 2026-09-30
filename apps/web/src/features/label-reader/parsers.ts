@@ -78,7 +78,7 @@ const impressParser: LabelParser = {
 
 const schattdecorParser: LabelParser = {
   name: 'SchattdecorLabelParser',
-  version: '1.1.0',
+  version: '1.2.0',
   matches: ({ text, codes }) =>
     /\bSCHAT[TIL1]DECOR\b/i.test(text) ||
     codes.some((code) => /^D\d{8,12}$/i.test(code.value)) ||
@@ -173,14 +173,22 @@ export function parseLabel(input: ParserInput): {
   const fields = parser ? parser.parse(input) : parseUnknown(input);
   if (input.words?.length) {
     const spatial = spatialImportantFields(input.words, fields.supplier.value);
-    // Never use OCR text order to infer the other column: it may be the quantity.
-    if (spatial.widthMm?.value && !spatial.lengthMm?.value) fields.lengthMm = empty<number>();
-    if (spatial.lengthMm?.value && !spatial.widthMm?.value) fields.widthMm = empty<number>();
-    if (spatial.quantitySheets?.value) {
-      if (!spatial.widthMm && fields.widthMm.value === spatial.quantitySheets.value) fields.widthMm = empty<number>();
-      if (!spatial.lengthMm && fields.lengthMm.value === spatial.quantitySheets.value) fields.lengthMm = empty<number>();
+    const fromCode = (key: keyof LabelFields) => fields[key].sources.some((source) => source === 'QR' || source === 'BARCODE');
+    if (fields.supplier.value === 'SCHATTDECOR' && !spatial.quantitySheets
+      && !fromCode('quantitySheets')) {
+      fields.quantitySheets = empty<number>();
     }
-    Object.assign(fields, spatial);
+    // Never use OCR text order to infer the other column: it may be the quantity.
+    if (spatial.widthMm?.value && !spatial.lengthMm?.value && !fromCode('lengthMm')) fields.lengthMm = empty<number>();
+    if (spatial.lengthMm?.value && !spatial.widthMm?.value && !fromCode('widthMm')) fields.widthMm = empty<number>();
+    if (spatial.quantitySheets?.value) {
+      if (!spatial.widthMm && fields.widthMm.value === spatial.quantitySheets.value && !fromCode('widthMm')) fields.widthMm = empty<number>();
+      if (!spatial.lengthMm && fields.lengthMm.value === spatial.quantitySheets.value && !fromCode('lengthMm')) fields.lengthMm = empty<number>();
+    }
+    for (const key of Object.keys(spatial) as (keyof LabelFields)[]) {
+      // Structured codes must not be overwritten by an unrelated OCR column.
+      if (!fromCode(key)) fields[key] = spatial[key] as never;
+    }
   }
   const barcodeSscc = ssccFromCodes(input.codes);
   fields.supplierSscc = barcodeSscc
@@ -244,8 +252,7 @@ function parseSchattdecorOcr(input: ParserInput): LabelFields {
   const dimensions = parseDimensions(text);
   const barcodeLot = input.codes.find((code) => /^D\d{8,12}$/i.test(code.value))?.value;
   const quantity =
-    parseInteger(firstMatch(text, [/(?:QDE\.?\s+DE\s+FOLHAS?|QUANTITY)\s*[:#-]?\s*(\d{2,5})/i])) ??
-    standaloneQuantity(text, dimensions);
+    parseInteger(firstMatch(text, [/(?:QDE\.?\s+DE\s+FOLHAS?|QUANTITY)\s*[:#-]?\s*(\d{2,5})/i]));
   return {
     ...emptyFields(),
     supplier: reading('SCHATTDECOR', barcodeLot ? 0.99 : /SCHATTDECOR/i.test(text) ? 0.98 : 0.7, barcodeLot ? 'BARCODE' : 'OCR'),

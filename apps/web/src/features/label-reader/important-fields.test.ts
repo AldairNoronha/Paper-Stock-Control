@@ -9,6 +9,35 @@ function word(text: string, x: number, y: number, width = 75, h = 20): OcrWord {
 }
 
 describe('important label fields', () => {
+  it('reads LENHO sheets (810) above weight (1038), even when OCR text ends with weight', () => {
+    const result = parseLabel({ text: 'SCHATTDECOR\nLENHO\n2765\n1865\n810\n1038', codes: [], ocrConfidence: 0.8,
+      words: [word('Comprimento', 20, 10, 110), word('Largura', 220, 10), word('folhas:', 430, 10),
+        word('2765', 25, 50), word('1865', 225, 50), word('810', 425, 50), word('Peso', 220, 100), word('1038', 220, 135)] });
+    expect(result.fields.quantitySheets.value).toBe(810);
+    expect(result.fields.widthMm.value).toBe(1865);
+    expect(result.fields.lengthMm.value).toBe(2765);
+  });
+
+  it('does not cross another header to borrow a number from the next row', () => {
+    expect(spatialImportantFields([word('folhas', 220, 10), word('Peso', 220, 60), word('1038', 220, 95)], 'SCHATTDECOR').quantitySheets).toBeUndefined();
+  });
+
+  it('preserves structured QR quantity even when spatial OCR reads a different value', () => {
+    const result = parseLabel({ text: 'SCHATTDECOR', ocrConfidence: 0.8,
+      codes: [{ format: 'QR_CODE', value: 'LENHO|D009235654|810|1865|2765|4176.95|superior|' }],
+      words: [word('folhas', 220, 10), word('1038', 220, 50)] });
+    expect(result.fields.quantitySheets.value).toBe(810);
+    expect(result.fields.quantitySheets.sources).toEqual(['QR']);
+  });
+
+  it('does not erase a QR dimension when only one OCR dimension header survives', () => {
+    const result = parseLabel({ text: 'SCHATTDECOR', ocrConfidence: 0.8,
+      codes: [{ format: 'QR_CODE', value: 'LENHO|D009235654|810|1865|2765|4176.95|superior|' }],
+      words: [word('Largura', 220, 10), word('1865', 225, 50)] });
+    expect(result.fields.widthMm.value).toBe(1865);
+    expect(result.fields.lengthMm.value).toBe(2765);
+    expect(result.fields.lengthMm.sources).toEqual(['QR']);
+  });
   it('associates each Schattdecor header with its column, not with weight or order in OCR text', () => {
     const words = [word('Comprimento', 20, 10, 110), word('Largura', 220, 10), word('folhas:', 430, 10),
       word('1860', 25, 50), word('2760', 225, 50), word('1201', 425, 50),

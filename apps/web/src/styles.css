@@ -33,6 +33,29 @@ button, label[for] { -webkit-tap-highlight-color: transparent; }
   box-shadow: 0 1.5rem 4rem rgba(22, 51, 44, 0.08);
 }
 
+.app-update {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.7rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #bfd9ca;
+  border-radius: 0.9rem;
+  background: #fff;
+  font-size: 0.8rem;
+}
+.app-update p { flex-basis: 100%; margin: 0; line-height: 1.5; }
+.app-update button {
+  padding: 0.6rem 0.8rem;
+  border: 1px solid #b8c9c1;
+  border-radius: 0.6rem;
+  background: #f2f7f4;
+  color: #173f35;
+  cursor: pointer;
+}
+
 .hero {
   position: relative;
   overflow: hidden;

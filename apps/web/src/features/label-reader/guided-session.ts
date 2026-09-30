@@ -10,6 +10,7 @@ import type {
   ImageQualityResult,
   LabelAnalysisResult,
   LabelFields,
+  OcrWord,
   ReadingSource,
   SupplierCode
 } from './types';
@@ -132,7 +133,8 @@ export class GuidedScanAccumulator {
       parsed.fields,
       observation.target,
       observation.text,
-      observation.ocrConfidence
+      observation.ocrConfidence,
+      observation.words
     );
     const merged = { ...this.result.fields } as LabelFields;
     const acceptedFields: (keyof LabelFields)[] = [];
@@ -232,7 +234,8 @@ function applyTargetedFallbacks(
   fields: LabelFields,
   target: GuidedCaptureTarget,
   sourceText: string,
-  ocrConfidence: number
+  ocrConfidence: number,
+  words?: OcrWord[]
 ): LabelFields {
   const text = sourceText.replace(/\r/g, '').replace(/[ \t]+/g, ' ').trim();
   const confidence = Math.max(0.55, Math.min(0.9, ocrConfidence));
@@ -253,7 +256,7 @@ function applyTargetedFallbacks(
     const name = material ?? (next.supplier.value ? focusedMaterial(sourceText) : null);
     if (name) next.supplierMaterialName = reading(name, Math.min(confidence, material ? 0.9 : 0.75), 'OCR');
   }
-  if (target === 'quantity' && !next.quantitySheets.value) {
+  if (target === 'quantity' && !next.quantitySheets.value && !words?.length) {
     const quantity = firstMatch(text, [
       /(?:QDE\.?\s+DE\s+FOLHAS?|QUANTIDADE\s*(?:DE\s+FOLHAS?)?|QUANTITY\s*(?:SHEETS?|\(PC\)|PC))\D{0,20}(\d{2,5})/i,
       /(?:FOLHAS?|SHEETS?)\s*[:#-]?\s*(\d{2,5})/i
@@ -273,7 +276,8 @@ function applyTargetedFallbacks(
   }
   if (target === 'quantity' && !next.quantitySheets.value && next.supplier.value && !/PESO|WEIGHT|\bKG\b/i.test(text)) {
     const candidates = [...text.matchAll(/^\s*(\d{2,5})\s*$/gm)];
-    if (candidates.length === 1) {
+    const numericTokens = [...text.matchAll(/(?<![\w.,/-])\d{2,5}(?![\w.,/-])/g)];
+    if (candidates.length === 1 && numericTokens.length === 1) {
       // Explicit close-up of one selected field is tentative, never 100% confidence.
       next.quantitySheets = reading(Number(candidates[0][1]), Math.min(confidence, 0.65), 'OCR');
     }

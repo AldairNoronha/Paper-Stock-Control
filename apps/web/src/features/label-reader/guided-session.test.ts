@@ -27,6 +27,16 @@ function observation(partial: Partial<GuidedObservation>): GuidedObservation {
 }
 
 describe('guided scan accumulator', () => {
+  it('requires an isolated quantity close-up when headers are lost, not a row containing weight', () => {
+    const accumulator = new GuidedScanAccumulator('SCHATTDECOR');
+    const ambiguous = observation({ target: 'quantity', text: '2765 1865 810\n1038' });
+    accumulator.observe(ambiguous); accumulator.observe(ambiguous);
+    expect(accumulator.current().fields.quantitySheets.value).toBeNull();
+    const closeUp = observation({ target: 'quantity', text: '810' });
+    accumulator.observe(closeUp); accumulator.observe(closeUp);
+    expect(accumulator.current().fields.quantitySheets.value).toBe(810);
+    expect(accumulator.current().fields.quantitySheets.confidence).toBeLessThan(0.7);
+  });
   it('reads highlighted Impress fields without collecting weight or treating order as lot', () => {
     const accumulator = new GuidedScanAccumulator('IMPRESS');
     const frames = [

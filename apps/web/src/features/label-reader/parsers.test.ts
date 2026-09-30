@@ -3,6 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { parseLabel } from './parsers';
 
 describe('supplier label parsers', () => {
+  it('does not choose the last unlabelled number (weight 1038) as sheets for LENHO', () => {
+    const result = parseLabel({ text: 'SCHATTDECOR\nLENHO\n2765\n1865\n810\n1038\nD009235654', ocrConfidence: 0.8, codes: [] });
+    expect(result.fields.quantitySheets.value).toBeNull();
+    expect(result.fields.lotCode.value).toBe('D009235654');
+  });
   it('does not accept a truncated Impress pallet when OCR loses suffix separators', () => {
     const result = parseLabel({ text: 'IMPRESS\nE-102410/270-15.1.02', ocrConfidence: 0.19, codes: [] });
     expect(result.fields.supplierPalletCode.value).toBeNull();
@@ -126,7 +131,9 @@ ffsuperi`
     expect(result.fields.supplierMaterialName.value).toBe('CONVES');
     expect(result.fields.lotCode.value).toBe('D009247388');
     expect(result.fields.lotCode.sources).toContain('BARCODE');
-    expect(result.fields.quantitySheets.value).toBe(850);
+    // Header-free columns include both weight (1052) and sheets (850).
+    // Text order is not evidence of which number represents sheets.
+    expect(result.fields.quantitySheets.value).toBeNull();
   });
 
   it('recognizes noisy Interprint OCR from the supplied photo', () => {

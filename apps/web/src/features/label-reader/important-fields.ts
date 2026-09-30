@@ -22,7 +22,11 @@ function below(words: OcrWord[], anchor: OcrWord, valid: (text: string) => boole
   const candidates = words.filter((word) => {
     const gap = word.bbox.y0 - anchor.bbox.y1;
     const tolerance = Math.max((anchor.bbox.x1 - anchor.bbox.x0) * 0.75, height(anchor) * 4, (word.bbox.x1 - word.bbox.x0) * 0.8);
-    return valid(word.text) && gap >= -height(anchor) * 0.3 && gap <= Math.max(height(anchor) * 7, height(word) * 4)
+    const crossedHeader = words.some((other) => other !== anchor && other !== word
+      && /^(?:PESO|WEIGHT|KG|TOTAL|AREA|M2|LARGURA|WIDTH|COMPRIMENTO|LENGTH|FOLHAS|SHEETS)$/.test(normalize(other.text))
+      && other.bbox.y0 > anchor.bbox.y1 && other.bbox.y1 <= word.bbox.y0
+      && Math.abs(center(other) - center(anchor)) <= Math.max(tolerance, (other.bbox.x1 - other.bbox.x0) * 0.75));
+    return valid(word.text) && !crossedHeader && gap >= -height(anchor) * 0.3 && gap <= Math.max(height(anchor) * 7, height(word) * 4)
       && Math.abs(center(word) - center(anchor)) <= tolerance;
   }).sort((a, b) => a.bbox.y0 - b.bbox.y0 || Math.abs(center(a) - center(anchor)) - Math.abs(center(b) - center(anchor)));
   const first = candidates[0];

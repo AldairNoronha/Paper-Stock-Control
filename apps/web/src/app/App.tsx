@@ -1,11 +1,13 @@
 import { AuthGate } from '../features/auth/AuthGate';
 import { LabelReader } from '../features/label-reader/LabelReader';
 import { getRuntimeConfig } from '../lib/runtime';
+import { AppUpdate } from './AppUpdate';
 
 export function App() {
   const config = getRuntimeConfig();
   return (
     <main className="app-shell">
+      <AppUpdate />
       <section className="hero" aria-labelledby="page-title">
         <p className="eyebrow">
           LEITURA DE ETIQUETAS · {config ? 'OPERACIONAL' : 'PILOTO'}

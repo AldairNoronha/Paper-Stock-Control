@@ -71,11 +71,14 @@ export class OcrSession {
     });
     let result = await worker.recognize(canvas, {}, { text: true, blocks: true });
     const damagedLot = target === 'lot' ? /\b(D\d{8,12})[A-Z]\b/i.exec(result.data.text) : null;
-    if (damagedLot) {
+    const zeroConfusion = target === 'lot' ? /\b(D[0-9O]{8,12})\b/i.exec(result.data.text) : null;
+    const expectedLot = damagedLot?.[1]
+      ?? (zeroConfusion && /O/i.test(zeroConfusion[1]) ? `D${zeroConfusion[1].slice(1).replace(/O/gi, '0')}` : null);
+    if (expectedLot) {
       await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_LINE, tessedit_char_whitelist: 'D0123456789' });
       const numeric = await worker.recognize(canvas, {}, { text: true, blocks: true });
       // Independent constrained reading must agree with EVERY original digit.
-      if (numeric.data.text.trim() === damagedLot[1]) {
+      if (numeric.data.text.trim() === expectedLot) {
         result = numeric;
         result.data.confidence = Math.min(result.data.confidence, 65);
       }
