@@ -3,15 +3,27 @@ import type { ImageQualityResult, QualityIssue } from './types';
 const SAMPLE_MAX_SIZE = 720;
 
 export function checkImageQuality(image: HTMLImageElement): ImageQualityResult {
-  const scale = Math.min(1, SAMPLE_MAX_SIZE / Math.max(image.naturalWidth, image.naturalHeight));
+  return checkVisualSource(image, image.naturalWidth, image.naturalHeight);
+}
+
+export function checkCanvasQuality(canvas: HTMLCanvasElement): ImageQualityResult {
+  return checkVisualSource(canvas, canvas.width, canvas.height);
+}
+
+function checkVisualSource(
+  source: CanvasImageSource,
+  sourceWidth: number,
+  sourceHeight: number
+): ImageQualityResult {
+  const scale = Math.min(1, SAMPLE_MAX_SIZE / Math.max(sourceWidth, sourceHeight));
   const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
-  canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+  canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+  canvas.height = Math.max(1, Math.round(sourceHeight * scale));
   const context = canvas.getContext('2d', { willReadFrequently: true });
   if (!context) {
     throw new Error('Não foi possível avaliar a fotografia neste navegador.');
   }
-  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  context.drawImage(source, 0, 0, canvas.width, canvas.height);
   const data = context.getImageData(0, 0, canvas.width, canvas.height).data;
   const grayscale = new Float32Array(canvas.width * canvas.height);
   let sum = 0;
@@ -27,12 +39,12 @@ export function checkImageQuality(image: HTMLImageElement): ImageQualityResult {
   }
   const contrast = Math.sqrt(squaredDifference / grayscale.length);
   const sharpness = laplacianVariance(grayscale, canvas.width, canvas.height);
-  const megapixels = (image.naturalWidth * image.naturalHeight) / 1_000_000;
-  const issues = buildIssues(image.naturalWidth, image.naturalHeight, brightness, contrast, sharpness);
+  const megapixels = (sourceWidth * sourceHeight) / 1_000_000;
+  const issues = buildIssues(sourceWidth, sourceHeight, brightness, contrast, sharpness);
 
   return {
-    width: image.naturalWidth,
-    height: image.naturalHeight,
+    width: sourceWidth,
+    height: sourceHeight,
     megapixels,
     brightness,
     contrast,

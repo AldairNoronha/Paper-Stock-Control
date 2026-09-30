@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 
@@ -5,6 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 
 SupplierCode = Literal["IMPRESS", "SCHATTDECOR", "INTERPRINT", "UNKNOWN"]
 ReadingSource = Literal["QR", "BARCODE", "OCR", "CALCULATION", "MANUAL"]
+CaptureTarget = Literal["code", "identity", "quantity", "dimensions", "lot", "overview"]
 FieldValue = str | int | float
 
 
@@ -51,3 +53,19 @@ class LabelAnalysisSubmission(BaseModel):
             if not field_name.replace("_", "").isalnum() or len(field_name) > 80:
                 raise ValueError(f"invalid field name: {field_name}")
         return value
+
+
+class LabelCaptureSubmission(BaseModel):
+    target: CaptureTarget
+    field_names: list[str] = Field(min_length=1, max_length=20)
+    captured_at: datetime
+    quality: ImageQualitySubmission
+
+    @field_validator("field_names")
+    @classmethod
+    def safe_field_names(cls, value: list[str]) -> list[str]:
+        unique = list(dict.fromkeys(value))
+        for field_name in unique:
+            if not field_name.replace("_", "").isalnum() or len(field_name) > 80:
+                raise ValueError(f"invalid field name: {field_name}")
+        return unique

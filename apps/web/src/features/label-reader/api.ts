@@ -1,5 +1,5 @@
 import type { RuntimeConfig } from '../../lib/runtime';
-import type { LabelAnalysisResult } from './types';
+import type { CaptureEvidence, LabelAnalysisResult } from './types';
 
 export interface SupplierDto { id: string; code: string; name: string }
 export interface MaterialDto { id: string; internal_code: string; name: string; width_mm: number; length_mm: number }
@@ -55,6 +55,7 @@ export async function persistReceipt(
   materialId: string,
   locationId: string,
   idempotencyKey: string,
+  evidence: CaptureEvidence[] = [],
   existingScanId?: string,
   onScanCreated?: (scanId: string) => void
 ): Promise<{ receipt: ReceiptResult; scanId: string }> {
@@ -78,6 +79,19 @@ export async function persistReceipt(
         sharpness: result.quality.sharpness
       }
     }));
+    form.append('evidence_manifest', JSON.stringify(evidence.map((item) => ({
+      target: item.target,
+      field_names: item.fieldNames,
+      captured_at: item.capturedAt,
+      quality: {
+        width: item.quality.width,
+        height: item.quality.height,
+        brightness: item.quality.brightness,
+        contrast: item.quality.contrast,
+        sharpness: item.quality.sharpness
+      }
+    }))));
+    for (const item of evidence) form.append('evidence_images', item.file);
     const scan = await apiRequest<{ id: string }>(config, token, '/labels/scans', {
       method: 'POST',
       body: form

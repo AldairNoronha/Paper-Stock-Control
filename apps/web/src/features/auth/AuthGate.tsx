@@ -8,9 +8,10 @@ import type { RuntimeConfig } from '../../lib/runtime';
 interface AuthGateProps {
   config: RuntimeConfig;
   children: (accessToken: string, signOut: () => Promise<void>) => ReactNode;
+  pilot?: ReactNode;
 }
 
-export function AuthGate({ config, children }: AuthGateProps) {
+export function AuthGate({ config, children, pilot }: AuthGateProps) {
   const client = useMemo(
     () => createClient(config.supabaseUrl, config.supabasePublishableKey),
     [config]
@@ -21,6 +22,7 @@ export function AuthGate({ config, children }: AuthGateProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [pilotMode, setPilotMode] = useState(false);
 
   useEffect(() => {
     void client.auth.getSession().then(({ data }) => {
@@ -44,6 +46,17 @@ export function AuthGate({ config, children }: AuthGateProps) {
   }
 
   if (loading) return <div className="auth-card">Verificando sessão…</div>;
+  if (!session && pilotMode && pilot) {
+    return (
+      <>
+        <div className="session-bar pilot-session">
+          <span>Modo teste · a leitura não cria pallet nem altera o estoque</span>
+          <button type="button" onClick={() => setPilotMode(false)}>Entrar no operacional</button>
+        </div>
+        {pilot}
+      </>
+    );
+  }
   if (!session) {
     return (
       <form className="auth-card" onSubmit={signIn}>
@@ -61,6 +74,11 @@ export function AuthGate({ config, children }: AuthGateProps) {
         <button className="primary-button" type="submit" disabled={submitting}>
           {submitting ? 'Entrando…' : 'Entrar'}
         </button>
+        {pilot && (
+          <button className="secondary-button" type="button" onClick={() => setPilotMode(true)}>
+            Testar scanner sem entrar
+          </button>
+        )}
       </form>
     );
   }

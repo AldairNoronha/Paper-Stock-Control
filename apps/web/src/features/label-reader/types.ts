@@ -68,3 +68,28 @@ export interface AnalysisProgress {
   progress: number;
   message: string;
 }
+
+export type GuidedCaptureTarget =
+  | 'code'
+  | 'identity'
+  | 'quantity'
+  | 'dimensions'
+  | 'lot'
+  | 'overview';
+
+export interface CaptureEvidence {
+  target: GuidedCaptureTarget;
+  fieldNames: (keyof LabelFields)[];
+  file: File;
+  quality: ImageQualityResult;
+  capturedAt: string;
+}
+
+export interface GuidedObservation {
+  text: string;
+  ocrConfidence: number;
+  codes: DetectedCode[];
+  quality: ImageQualityResult;
+  target: GuidedCaptureTarget;
+  capturedAt: string;
+}

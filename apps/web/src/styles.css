@@ -163,6 +163,118 @@ h1 {
 .camera-button span { font-size: 1.2rem; font-weight: 850; }
 .camera-button small { color: #6c7f78; }
 
+.scanner-start { display: grid; gap: 0.8rem; }
+.scanner-start .photo-fallback { justify-self: center; }
+.live-camera { display: none; gap: 0.85rem; }
+.live-camera.visible { display: grid; }
+.video-stage {
+  position: relative;
+  min-height: 20rem;
+  overflow: hidden;
+  border-radius: 1.2rem;
+  background: #08110e;
+}
+.video-stage video {
+  display: block;
+  width: 100%;
+  min-height: 20rem;
+  max-height: 72vh;
+  object-fit: cover;
+}
+.focus-guide {
+  position: absolute;
+  inset: 29% 5%;
+  border: 2px solid rgba(255, 255, 255, 0.95);
+  border-radius: 0.85rem;
+  box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.34), inset 0 0 0 1px rgba(23, 106, 59, 0.65);
+  pointer-events: none;
+}
+.focus-guide::before,
+.focus-guide::after,
+.focus-guide span::before,
+.focus-guide span::after {
+  position: absolute;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-color: #71e69d;
+  border-style: solid;
+  content: "";
+}
+.focus-guide::before { top: -0.18rem; left: -0.18rem; border-width: 0.28rem 0 0 0.28rem; border-radius: 0.55rem 0 0; }
+.focus-guide::after { top: -0.18rem; right: -0.18rem; border-width: 0.28rem 0.28rem 0 0; border-radius: 0 0.55rem 0 0; }
+.focus-guide span::before { bottom: -0.18rem; left: -0.18rem; border-width: 0 0 0.28rem 0.28rem; border-radius: 0 0 0 0.55rem; }
+.focus-guide span::after { right: -0.18rem; bottom: -0.18rem; border-width: 0 0.28rem 0.28rem 0; border-radius: 0 0 0.55rem; }
+.camera-badge {
+  position: absolute;
+  top: 0.8rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.48rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(8, 17, 14, 0.78);
+  color: white;
+  font-size: 0.76rem;
+  font-weight: 850;
+  white-space: nowrap;
+}
+.camera-wait {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  background: #10261f;
+  color: white;
+  font-weight: 800;
+}
+.scanner-coach {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem;
+  border-radius: 0.9rem;
+  background: #173f35;
+  color: white;
+}
+.scanner-coach .eyebrow { margin-bottom: 0.3rem; color: #f0bd68; }
+.scanner-coach strong { line-height: 1.45; }
+.scanner-progress {
+  display: grid;
+  width: 3.5rem;
+  height: 3.5rem;
+  flex: 0 0 auto;
+  place-content: center;
+  border: 0.22rem solid #71e69d;
+  border-radius: 50%;
+  font-weight: 900;
+}
+.frame-warning { padding: 0.75rem 0.9rem; border-radius: 0.75rem; background: #fff3d8; color: #79500d; font-size: 0.84rem; font-weight: 700; }
+.live-progress { height: 0.35rem; overflow: hidden; border-radius: 1rem; background: #dce7e1; }
+.live-progress span { display: block; height: 100%; border-radius: inherit; background: #2c9b62; transition: width 180ms ease; }
+.scanner-tools { display: flex; align-items: center; gap: 0.8rem; }
+.zoom-control { display: flex; flex: 1; align-items: center; gap: 0.6rem; color: #52675f; font-size: 0.8rem; font-weight: 750; }
+.zoom-control input { width: 100%; accent-color: #23704f; }
+.capture-checklist { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.65rem; }
+.checklist-item {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.72rem;
+  border: 1px solid #d7e1dc;
+  border-radius: 0.8rem;
+  background: #f8faf9;
+}
+.checklist-item > span { color: #a16b13; font-size: 1.2rem; font-weight: 900; }
+.checklist-item.complete { border-color: #a7d4b7; background: #edf9f1; }
+.checklist-item.complete > span { color: #1f7749; }
+.checklist-item div { min-width: 0; }
+.checklist-item strong,
+.checklist-item small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.checklist-item strong { color: #334f46; font-size: 0.78rem; }
+.checklist-item small { margin-top: 0.12rem; color: #71827c; font-size: 0.68rem; }
+.scanner-actions { display: grid; grid-template-columns: 0.7fr 1.3fr; gap: 0.7rem; }
+
 .capture-layout { display: grid; gap: 1rem; }
 .photo-panel {
   overflow: hidden;
@@ -313,7 +425,13 @@ footer { padding: 1.25rem 0.25rem 0; color: #657871; font-size: 0.78rem; text-al
   .reader-heading { display: grid; }
   .privacy-pill { justify-self: start; }
   .camera-button { min-height: 13rem; }
+  .video-stage, .video-stage video { min-height: 25rem; }
+  .capture-checklist { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .scanner-tools { align-items: stretch; flex-direction: column; }
+  .scanner-coach { align-items: flex-start; }
+  .scanner-coach strong { font-size: 0.88rem; }
   .photo-actions, .review-actions { display: grid; grid-template-columns: 1fr 1.3fr; }
+  .photo-actions > :only-child { grid-column: 1 / -1; }
   .field-grid { grid-template-columns: 1fr; padding: 1rem; }
   .review-summary { align-items: flex-start; padding: 1rem; }
   .confidence-ring { width: 4.7rem; height: 4.7rem; }

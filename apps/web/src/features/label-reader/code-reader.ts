@@ -31,9 +31,10 @@ export async function readCodes(
     for (const attempt of attempts) {
       try {
         const result = await attempt();
+        const barcodeFormat = result.getBarcodeFormat();
         detected.set(result.getText().trim(), {
           value: result.getText().trim(),
-          format: String(result.getBarcodeFormat())
+          format: BarcodeFormat[barcodeFormat] ?? String(barcodeFormat)
         });
         break;
       } catch {

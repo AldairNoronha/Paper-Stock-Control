@@ -7,9 +7,16 @@ from sqlalchemy import select
 from app.core.database import dispose_engine, session_factory
 from app.modules.identity.application.auth import CurrentUser
 from app.modules.labels.application.errors import LabelScanConflictError
-from app.modules.labels.application.schemas import LabelAnalysisSubmission
-from app.modules.labels.application.service import LabelScanService
-from app.modules.labels.domain.models import LabelFieldReading, LabelScanStatus
+from app.modules.labels.application.schemas import (
+    LabelAnalysisSubmission,
+    LabelCaptureSubmission,
+)
+from app.modules.labels.application.service import LabelCaptureUpload, LabelScanService
+from app.modules.labels.domain.models import (
+    LabelFieldReading,
+    LabelScanCapture,
+    LabelScanStatus,
+)
 
 pytestmark = [
     pytest.mark.integration,
@@ -90,11 +97,32 @@ async def test_scan_persists_image_metadata_and_field_evidence() -> None:
                 content=IMAGE_BYTES,
                 analysis=analysis,
                 actor=ACTOR,
+                captures=[
+                    LabelCaptureUpload(
+                        filename="quantity.jpg",
+                        content_type="image/jpeg",
+                        content=IMAGE_BYTES,
+                        metadata=LabelCaptureSubmission.model_validate(
+                            {
+                                "target": "quantity",
+                                "field_names": ["quantitySheets"],
+                                "captured_at": "2026-09-30T12:00:00Z",
+                                "quality": {
+                                    "width": 1600,
+                                    "height": 700,
+                                    "brightness": 160,
+                                    "contrast": 35,
+                                    "sharpness": 70,
+                                },
+                            }
+                        ),
+                    )
+                ],
             )
             scan_id = scan.id
 
         assert scan.status is LabelScanStatus.READY
-        assert len(storage.uploaded) == 1
+        assert len(storage.uploaded) == 2
         assert storage.deleted == []
 
         async with session_factory() as session:
@@ -112,6 +140,22 @@ async def test_scan_persists_image_metadata_and_field_evidence() -> None:
                 "lotCode",
                 "quantitySheets",
             }
+            quantity = next(
+                reading for reading in readings if reading.field_name == "quantitySheets"
+            )
+            assert any("capture_id" in item for item in quantity.evidence)
+            captures = list(
+                (
+                    await session.scalars(
+                        select(LabelScanCapture).where(
+                            LabelScanCapture.label_scan_id == scan_id
+                        )
+                    )
+                ).all()
+            )
+            assert len(captures) == 1
+            assert captures[0].target == "quantity"
+            assert captures[0].field_names == ["quantitySheets"]
 
         async with session_factory() as session:
             with pytest.raises(LabelScanConflictError, match="already registered"):
@@ -122,6 +166,6 @@ async def test_scan_persists_image_metadata_and_field_evidence() -> None:
                     analysis=analysis,
                     actor=ACTOR,
                 )
-            assert len(storage.uploaded) == 1
+            assert len(storage.uploaded) == 2
     finally:
         await dispose_engine()

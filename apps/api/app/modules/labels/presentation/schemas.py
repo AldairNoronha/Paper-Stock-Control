@@ -14,10 +14,11 @@ class LabelScanResponse(BaseModel):
     parser_name: str | None
     parser_version: str | None
     overall_confidence: float | None
+    capture_count: int = 0
     created_at: datetime
 
     @classmethod
-    def from_domain(cls, scan: LabelScan) -> "LabelScanResponse":
+    def from_domain(cls, scan: LabelScan, *, capture_count: int = 0) -> "LabelScanResponse":
         return cls(
             id=scan.id,
             image_path=scan.image_path,
@@ -28,5 +29,6 @@ class LabelScanResponse(BaseModel):
             overall_confidence=float(scan.overall_confidence)
             if scan.overall_confidence is not None
             else None,
+            capture_count=capture_count,
             created_at=scan.created_at,
         )

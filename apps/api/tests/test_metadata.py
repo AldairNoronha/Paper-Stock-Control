@@ -8,6 +8,7 @@ def test_expected_tables_are_registered() -> None:
         "idempotency_records",
         "inventory_movements",
         "label_field_readings",
+        "label_scan_captures",
         "label_scans",
         "locations",
         "materials",

@@ -1,5 +1,7 @@
 import hashlib
 import json
+from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import PurePosixPath
 
 from sqlalchemy import select
@@ -12,8 +14,16 @@ from app.modules.labels.application.errors import (
     LabelScanConflictError,
     LabelScanValidationError,
 )
-from app.modules.labels.application.schemas import LabelAnalysisSubmission
-from app.modules.labels.domain.models import LabelFieldReading, LabelScan, LabelScanStatus
+from app.modules.labels.application.schemas import (
+    LabelAnalysisSubmission,
+    LabelCaptureSubmission,
+)
+from app.modules.labels.domain.models import (
+    LabelFieldReading,
+    LabelScan,
+    LabelScanCapture,
+    LabelScanStatus,
+)
 from app.modules.labels.infrastructure.storage import LabelImageStorage
 
 ALLOWED_CONTENT_TYPES = {
@@ -22,7 +32,18 @@ ALLOWED_CONTENT_TYPES = {
     "image/webp": ".webp",
 }
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
+MAX_CAPTURE_BYTES = 4 * 1024 * 1024
+MAX_CAPTURE_COUNT = 12
+MAX_TOTAL_CAPTURE_BYTES = 24 * 1024 * 1024
 CRITICAL_FIELDS = ("supplier", "supplierMaterialName", "quantitySheets", "widthMm", "lengthMm")
+
+
+@dataclass(frozen=True)
+class LabelCaptureUpload:
+    filename: str
+    content_type: str
+    content: bytes
+    metadata: LabelCaptureSubmission
 
 
 class LabelScanService:
@@ -38,8 +59,10 @@ class LabelScanService:
         content: bytes,
         analysis: LabelAnalysisSubmission,
         actor: CurrentUser,
+        captures: Sequence[LabelCaptureUpload] = (),
     ) -> LabelScan:
         extension = self._validate_image(filename, content_type, content)
+        validated_captures = self._validate_captures(captures)
         image_sha256 = hashlib.sha256(content).hexdigest()
         scan_id = new_uuid7()
         image_path = f"{actor.id}/{scan_id}{extension}"
@@ -50,7 +73,7 @@ class LabelScanService:
         status = self._status(analysis)
         supplier_reading = analysis.fields.get("supplier")
 
-        uploaded = False
+        uploaded_paths: list[str] = []
         try:
             async with self._session.begin():
                 existing = await self._session.scalar(
@@ -64,7 +87,7 @@ class LabelScanService:
                 if analysis.supplier != "UNKNOWN" and supplier is None:
                     raise LabelScanValidationError("active supplier was not found")
                 await self._storage.upload(image_path, content, content_type)
-                uploaded = True
+                uploaded_paths.append(image_path)
                 scan = LabelScan(
                     id=scan_id,
                     image_path=image_path,
@@ -91,6 +114,37 @@ class LabelScanService:
                     created_by=actor.id,
                 )
                 self._session.add(scan)
+                capture_models: list[LabelScanCapture] = []
+                for index, (capture, capture_extension) in enumerate(validated_captures):
+                    capture_id = new_uuid7()
+                    capture_path = (
+                        f"{actor.id}/{scan_id}/evidence/"
+                        f"{index:02d}-{capture_id}{capture_extension}"
+                    )
+                    await self._storage.upload(
+                        capture_path,
+                        capture.content,
+                        capture.content_type,
+                    )
+                    uploaded_paths.append(capture_path)
+                    capture_models.append(
+                        LabelScanCapture(
+                            id=capture_id,
+                            label_scan_id=scan_id,
+                            target=capture.metadata.target,
+                            field_names=capture.metadata.field_names,
+                            image_path=capture_path,
+                            image_sha256=hashlib.sha256(capture.content).hexdigest(),
+                            content_type=capture.content_type,
+                            width=capture.metadata.quality.width,
+                            height=capture.metadata.quality.height,
+                            brightness=capture.metadata.quality.brightness,
+                            contrast=capture.metadata.quality.contrast,
+                            sharpness=capture.metadata.quality.sharpness,
+                            captured_at=capture.metadata.captured_at,
+                        )
+                    )
+                self._session.add_all(capture_models)
                 self._session.add_all(
                     [
                         LabelFieldReading(
@@ -98,7 +152,17 @@ class LabelScanService:
                             field_name=name,
                             normalized_value=reading.value,
                             confidence=reading.confidence,
-                            evidence=[{"source": source} for source in reading.sources],
+                            evidence=[
+                                *[{"source": source} for source in reading.sources],
+                                *[
+                                    {
+                                        "capture_id": str(capture_model.id),
+                                        "target": capture_model.target,
+                                    }
+                                    for capture_model in capture_models
+                                    if name in capture_model.field_names
+                                ],
+                            ],
                             was_corrected="MANUAL" in reading.sources,
                             corrected_by=actor.id if "MANUAL" in reading.sources else None,
                         )
@@ -107,10 +171,33 @@ class LabelScanService:
                 )
                 await self._session.flush()
         except Exception:
-            if uploaded:
-                await self._storage.delete(image_path)
+            for uploaded_path in reversed(uploaded_paths):
+                await self._storage.delete(uploaded_path)
             raise
         return scan
+
+    @classmethod
+    def _validate_captures(
+        cls,
+        captures: Sequence[LabelCaptureUpload],
+    ) -> list[tuple[LabelCaptureUpload, str]]:
+        if len(captures) > MAX_CAPTURE_COUNT:
+            raise LabelScanValidationError(
+                f"at most {MAX_CAPTURE_COUNT} evidence images are allowed"
+            )
+        if sum(len(capture.content) for capture in captures) > MAX_TOTAL_CAPTURE_BYTES:
+            raise LabelScanValidationError("evidence images exceed the total upload limit")
+        validated: list[tuple[LabelCaptureUpload, str]] = []
+        for capture in captures:
+            if len(capture.content) > MAX_CAPTURE_BYTES:
+                raise LabelScanValidationError("an evidence image exceeds the 4 MiB limit")
+            extension = cls._validate_image(
+                capture.filename,
+                capture.content_type,
+                capture.content,
+            )
+            validated.append((capture, extension))
+        return validated
 
     @staticmethod
     def _validate_image(filename: str, content_type: str, content: bytes) -> str:

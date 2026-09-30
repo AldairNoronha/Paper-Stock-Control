@@ -1,5 +1,4 @@
-import { useEffect, useId, useMemo, useState } from 'react';
-import type { ChangeEvent } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import type { RuntimeConfig } from '../../lib/runtime';
 import { analyzeLabel, ImageQualityError, recalculateAnalysis } from './analyzer';
@@ -15,8 +14,10 @@ import {
   formatArea,
   formatDuration
 } from './format';
+import { GuidedScanner } from './GuidedScanner';
 import type {
   AnalysisProgress,
+  CaptureEvidence,
   FieldReading,
   ImageQualityResult,
   LabelAnalysisResult,
@@ -35,8 +36,8 @@ interface LabelReaderProps {
 }
 
 export function LabelReader({ persistence }: LabelReaderProps = {}) {
-  const inputId = useId();
   const [file, setFile] = useState<File | null>(null);
+  const [evidence, setEvidence] = useState<CaptureEvidence[]>([]);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [progress, setProgress] = useState(initialProgress);
   const [result, setResult] = useState<LabelAnalysisResult | null>(null);
@@ -106,10 +107,7 @@ export function LabelReader({ persistence }: LabelReaderProps = {}) {
     );
   }, [result]);
 
-  function selectFile(event: ChangeEvent<HTMLInputElement>) {
-    const selected = event.target.files?.[0] ?? null;
-    event.target.value = '';
-    if (!selected) return;
+  function selectFile(selected: File) {
     if (!selected.type.startsWith('image/')) {
       setError('Selecione uma fotografia em formato de imagem.');
       return;
@@ -119,6 +117,7 @@ export function LabelReader({ persistence }: LabelReaderProps = {}) {
       return;
     }
     setFile(selected);
+    setEvidence([]);
     setResult(null);
     setQualityFailure(null);
     setError(null);
@@ -127,6 +126,22 @@ export function LabelReader({ persistence }: LabelReaderProps = {}) {
     setScanId(undefined);
     setReceiptKey(crypto.randomUUID());
     setProgress(initialProgress);
+  }
+
+  function reviewGuidedReading(
+    overview: File,
+    guidedResult: LabelAnalysisResult,
+    guidedEvidence: CaptureEvidence[]
+  ) {
+    setFile(overview);
+    setEvidence(guidedEvidence);
+    setResult(guidedResult);
+    setQualityFailure(null);
+    setError(null);
+    setApproved(false);
+    setReceipt(null);
+    setScanId(undefined);
+    setReceiptKey(crypto.randomUUID());
   }
 
   async function runAnalysis() {
@@ -200,6 +215,7 @@ export function LabelReader({ persistence }: LabelReaderProps = {}) {
           selectedMaterialId,
           selectedLocationId,
           receiptKey,
+          evidence,
           scanId,
           setScanId
         );
@@ -225,6 +241,7 @@ export function LabelReader({ persistence }: LabelReaderProps = {}) {
 
   function reset() {
     setFile(null);
+    setEvidence([]);
     setResult(null);
     setQualityFailure(null);
     setError(null);
@@ -239,33 +256,29 @@ export function LabelReader({ persistence }: LabelReaderProps = {}) {
     <section className="reader-card" aria-labelledby="reader-title">
       <div className="reader-heading">
         <div>
-          <p className="eyebrow">LEITURA PILOTO NO APARELHO</p>
-          <h2 id="reader-title">Fotografe a etiqueta</h2>
+          <p className="eyebrow">LEITURA GUIADA NO APARELHO</p>
+          <h2 id="reader-title">Percorra a etiqueta com a câmera</h2>
           <p>
-            Enquadre somente a etiqueta, evite reflexos e mantenha o celular firme.
+            O leitor coleta QR, códigos e textos por partes e avisa o que ainda falta.
           </p>
         </div>
         <span className="privacy-pill">Processamento local</span>
       </div>
 
-      {!previewUrl ? (
-        <label className="camera-button" htmlFor={inputId}>
-          <CameraIcon />
-          <span>Abrir câmera</span>
-          <small>ou escolher uma foto existente</small>
-        </label>
+      {!file && !result ? (
+        <GuidedScanner onReview={reviewGuidedReading} onPhotoSelected={selectFile} />
       ) : (
         <div className="capture-layout">
           <div className="photo-panel">
-            <img className="label-preview" src={previewUrl} alt="Etiqueta selecionada" />
-            <div className="photo-actions">
-              <label className="secondary-button" htmlFor={inputId}>
-                Trocar foto
-              </label>
-              <button className="primary-button" type="button" onClick={runAnalysis} disabled={isAnalyzing}>
-                {isAnalyzing ? 'Analisando…' : result ? 'Analisar novamente' : 'Ler etiqueta'}
-              </button>
-            </div>
+            {previewUrl && <img className="label-preview" src={previewUrl} alt="Etiqueta selecionada" />}
+            {evidence.length === 0 && (
+              <div className="photo-actions">
+                {!result && <button className="secondary-button" type="button" onClick={reset}>Cancelar foto</button>}
+                <button className="primary-button" type="button" onClick={runAnalysis} disabled={isAnalyzing}>
+                  {isAnalyzing ? 'Analisando…' : result ? 'Analisar novamente' : 'Ler etiqueta'}
+                </button>
+              </div>
+            )}
           </div>
 
           {isAnalyzing && <ProgressPanel progress={progress} />}
@@ -293,14 +306,6 @@ export function LabelReader({ persistence }: LabelReaderProps = {}) {
         </div>
       )}
 
-      <input
-        id={inputId}
-        className="visually-hidden"
-        type="file"
-        accept="image/*"
-        capture="environment"
-        onChange={selectFile}
-      />
     </section>
   );
 }
@@ -537,7 +542,7 @@ function ReviewPanel({
       )}
 
       <div className="review-actions">
-        <button className="secondary-button" type="button" onClick={onReset}>Nova foto</button>
+        <button className="secondary-button" type="button" onClick={onReset}>Nova leitura</button>
         <button
           className="primary-button"
           type="button"
@@ -615,13 +620,5 @@ function SelectField(props: FieldProps<SupplierCode>) {
         <option value="INTERPRINT">Interprint</option>
       </select>
     </FieldFrame>
-  );
-}
-
-function CameraIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M9 3 7.5 5H5a3 3 0 0 0-3 3v9a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3V8a3 3 0 0 0-3-3h-2.5L15 3H9Zm3 5a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9Zm0 2a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z" />
-    </svg>
   );
 }

@@ -1,8 +1,19 @@
+from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID
 
-from sqlalchemy import Enum, ForeignKey, Index, Numeric, String, Text, UniqueConstraint, text
+from sqlalchemy import (
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -80,5 +91,26 @@ class LabelFieldReading(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     was_corrected: Mapped[bool] = mapped_column(default=False, nullable=False)
     correction_reason: Mapped[str | None] = mapped_column(String(240))
     corrected_by: Mapped[UUID | None]
+
+    label_scan: Mapped[LabelScan] = relationship()
+
+
+class LabelScanCapture(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "label_scan_captures"
+
+    label_scan_id: Mapped[UUID] = mapped_column(
+        ForeignKey("label_scans.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    target: Mapped[str] = mapped_column(String(32), nullable=False)
+    field_names: Mapped[list[str]] = mapped_column(JSONB, default=list, nullable=False)
+    image_path: Mapped[str] = mapped_column(String(512), unique=True, nullable=False)
+    image_sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    content_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    width: Mapped[int] = mapped_column(nullable=False)
+    height: Mapped[int] = mapped_column(nullable=False)
+    brightness: Mapped[Decimal] = mapped_column(Numeric(8, 3), nullable=False)
+    contrast: Mapped[Decimal] = mapped_column(Numeric(10, 3), nullable=False)
+    sharpness: Mapped[Decimal] = mapped_column(Numeric(14, 3), nullable=False)
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     label_scan: Mapped[LabelScan] = relationship()

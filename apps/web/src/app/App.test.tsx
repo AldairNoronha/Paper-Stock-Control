@@ -10,8 +10,8 @@ describe('App', () => {
       screen.getByRole('heading', { name: 'Paper Stock Control' })
     ).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent(
-      'A foto não sai do aparelho neste teste'
+      'O vídeo não é gravado'
     );
-    expect(screen.getByText('Abrir câmera')).toBeInTheDocument();
+    expect(screen.getByText('Iniciar leitura guiada')).toBeInTheDocument();
   });
 });

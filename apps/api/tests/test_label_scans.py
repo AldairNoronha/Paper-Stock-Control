@@ -5,8 +5,15 @@ from pydantic import ValidationError
 
 from app.core.config import Settings
 from app.modules.labels.application.errors import LabelScanValidationError
-from app.modules.labels.application.schemas import LabelAnalysisSubmission
-from app.modules.labels.application.service import LabelScanService
+from app.modules.labels.application.schemas import (
+    LabelAnalysisSubmission,
+    LabelCaptureSubmission,
+)
+from app.modules.labels.application.service import (
+    MAX_CAPTURE_COUNT,
+    LabelCaptureUpload,
+    LabelScanService,
+)
 from app.modules.labels.domain.models import LabelScanStatus
 from app.modules.labels.infrastructure.storage import SupabaseLabelImageStorage
 
@@ -99,3 +106,47 @@ def test_legacy_service_key_keeps_bearer_header() -> None:
         "apikey": "legacy-service-key",
         "authorization": "Bearer legacy-service-key",
     }
+
+
+def test_guided_capture_contract_limits_image_count() -> None:
+    metadata = LabelCaptureSubmission.model_validate(
+        {
+            "target": "quantity",
+            "field_names": ["quantitySheets"],
+            "captured_at": "2026-09-30T12:00:00Z",
+            "quality": {
+                "width": 1600,
+                "height": 700,
+                "brightness": 150,
+                "contrast": 40,
+                "sharpness": 75,
+            },
+        }
+    )
+    capture = LabelCaptureUpload(
+        filename="quantity.jpg",
+        content_type="image/jpeg",
+        content=b"\xff\xd8\xffcapture",
+        metadata=metadata,
+    )
+
+    with pytest.raises(LabelScanValidationError, match="at most"):
+        LabelScanService._validate_captures([capture] * (MAX_CAPTURE_COUNT + 1))
+
+
+def test_guided_capture_rejects_unsafe_field_name() -> None:
+    with pytest.raises(ValidationError, match="invalid field name"):
+        LabelCaptureSubmission.model_validate(
+            {
+                "target": "lot",
+                "field_names": ["../../lot"],
+                "captured_at": "2026-09-30T12:00:00Z",
+                "quality": {
+                    "width": 1600,
+                    "height": 700,
+                    "brightness": 150,
+                    "contrast": 40,
+                    "sharpness": 75,
+                },
+            }
+        )

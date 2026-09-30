@@ -12,17 +12,17 @@ export function App() {
         </p>
         <h1 id="page-title">Paper Stock Control</h1>
         <p className="subtitle">
-          Fotografe uma etiqueta Impress, Schattdecor ou Interprint e revise os dados
-          identificados pelo aparelho.
+          Passe a câmera pelas áreas de uma etiqueta Impress, Schattdecor ou Interprint.
+          O aplicativo coleta cada campo e avisa o que ainda falta.
         </p>
         <div className="status" role="status">
           <span aria-hidden="true" />
-          {config ? 'Modo operacional conectado' : 'A foto não sai do aparelho neste teste'}
+          {config ? 'Modo operacional conectado' : 'O vídeo não é gravado; somente evidências aprovadas'}
         </div>
       </section>
 
       {config ? (
-        <AuthGate config={config}>
+        <AuthGate config={config} pilot={<LabelReader />}>
           {(accessToken, signOut) => (
             <>
               <div className="session-bar">
