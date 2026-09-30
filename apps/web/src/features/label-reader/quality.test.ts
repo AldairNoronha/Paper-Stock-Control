@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
 
-import { focusRegion } from './camera-frame';
+import { cameraFocusHeight, focusRegion } from './camera-frame';
 import { assessQualityIssues } from './quality';
 
 describe('live camera quality', () => {
+  it('keeps narrower field crops usable for 640x480 video on a portrait screen', () => {
+    for (const target of ['identity', 'quantity', 'dimensions', 'lot', 'area', 'expiry', 'reference', 'production'] as const) {
+      const crop = focusRegion(640, 480, 360, 400, cameraFocusHeight(target));
+      expect(crop.height).toBeLessThan(202);
+      expect(assessQualityIssues(crop.width, crop.height, 180, 50, 100, 'live').some((i) => i.severity === 'error')).toBe(false);
+    }
+  });
   it.each([[1280, 720], [720, 1280], [640, 480]])(
     'does not block OCR for a sharp %ix%i camera crop', (width, height) => {
       const crop = focusRegion(width, height);

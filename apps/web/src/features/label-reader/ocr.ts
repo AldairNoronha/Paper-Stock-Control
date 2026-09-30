@@ -1,8 +1,9 @@
-import type { GuidedCaptureTarget } from './types';
+import type { GuidedCaptureTarget, OcrWord } from './types';
 
 export interface OcrResult {
   text: string;
   confidence: number;
+  words: OcrWord[];
 }
 
 type TesseractModule = typeof import('tesseract.js');
@@ -64,13 +65,28 @@ export class OcrSession {
       preserve_interword_spaces: '1',
       // Supplier labels mix Portuguese/English headers and numbers in columns.
       // A numeric whitelist damages those headers, preventing field association.
-      tessedit_pageseg_mode: target === 'code' ? PSM.SINGLE_LINE : PSM.SPARSE_TEXT,
+      tessedit_pageseg_mode: target === 'code' ? PSM.SINGLE_LINE
+        : target === 'identity' ? PSM.SINGLE_BLOCK : PSM.SPARSE_TEXT,
       tessedit_char_whitelist: ''
     });
-    const result = await worker.recognize(canvas);
+    let result = await worker.recognize(canvas, {}, { text: true, blocks: true });
+    const damagedLot = target === 'lot' ? /\b(D\d{8,12})[A-Z]\b/i.exec(result.data.text) : null;
+    if (damagedLot) {
+      await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_LINE, tessedit_char_whitelist: 'D0123456789' });
+      const numeric = await worker.recognize(canvas, {}, { text: true, blocks: true });
+      // Independent constrained reading must agree with EVERY original digit.
+      if (numeric.data.text.trim() === damagedLot[1]) {
+        result = numeric;
+        result.data.confidence = Math.min(result.data.confidence, 65);
+      }
+    }
+    const words = (result.data.blocks ?? []).flatMap((block) => block.paragraphs)
+      .flatMap((paragraph) => paragraph.lines).flatMap((line) => line.words)
+      .map((word) => ({ text: word.text, confidence: Math.max(0, Math.min(1, word.confidence / 100)), bbox: word.bbox }));
     return {
       text: result.data.text.trim(),
-      confidence: Math.max(0, Math.min(1, result.data.confidence / 100))
+      confidence: Math.max(0, Math.min(1, result.data.confidence / 100)),
+      words
     };
   }
 }

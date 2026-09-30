@@ -127,7 +127,11 @@ export async function persistReceipt(
         parser: result.parserName,
         parser_version: result.parserVersion,
         detected_codes: result.detectedCodes,
-        validation: result.validation
+        validation: result.validation,
+        reviewed_fields: {
+          supplier_order_number: fields.supplierOrderNumber.value,
+          pallet_number: fields.palletNumber.value
+        }
       },
       label_scan_id: scanId
     })

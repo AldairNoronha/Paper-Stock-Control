@@ -11,6 +11,8 @@ export interface LabelFields {
   supplier: FieldReading<SupplierCode>;
   supplierMaterialName: FieldReading<string>;
   supplierPalletCode: FieldReading<string>;
+  supplierOrderNumber: FieldReading<string>;
+  palletNumber: FieldReading<number>;
   supplierSscc: FieldReading<string>;
   lotCode: FieldReading<string>;
   quantitySheets: FieldReading<number>;
@@ -76,7 +78,17 @@ export type GuidedCaptureTarget =
   | 'quantity'
   | 'dimensions'
   | 'lot'
+  | 'area'
+  | 'production'
+  | 'expiry'
+  | 'reference'
   | 'overview';
+
+export interface OcrWord {
+  text: string;
+  confidence: number;
+  bbox: { x0: number; y0: number; x1: number; y1: number };
+}
 
 export interface CaptureEvidence {
   target: GuidedCaptureTarget;
@@ -88,6 +100,7 @@ export interface CaptureEvidence {
 
 export interface GuidedObservation {
   text: string;
+  words?: OcrWord[];
   ocrConfidence: number;
   codes: DetectedCode[];
   quality: ImageQualityResult;

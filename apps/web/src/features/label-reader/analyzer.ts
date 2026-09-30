@@ -38,7 +38,7 @@ export async function analyzeLabel(
   });
 
   onProgress({ stage: 'parsing', progress: 0.88, message: 'Identificando fornecedor e conferindo valores…' });
-  const parsed = parseLabel({ text: ocr.text, ocrConfidence: ocr.confidence, codes: detectedCodes });
+  const parsed = parseLabel({ text: ocr.text, words: ocr.words, ocrConfidence: ocr.confidence, codes: detectedCodes });
   const validation = validateFields(parsed.fields);
   const overallConfidence = calculateOverallConfidence(parsed.fields, validation.areaConsistent);
   const reviewRequired =

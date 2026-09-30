@@ -27,6 +27,47 @@ function observation(partial: Partial<GuidedObservation>): GuidedObservation {
 }
 
 describe('guided scan accumulator', () => {
+  it('reads highlighted Impress fields without collecting weight or treating order as lot', () => {
+    const accumulator = new GuidedScanAccumulator('IMPRESS');
+    const frames = [
+      observation({ target: 'identity', text: 'PRODUTO\nPAU FERRO' }),
+      observation({ target: 'quantity', text: 'cabeçalho ilegível\n950', ocrConfidence: 0.35 }),
+      observation({ target: 'dimensions', text: '1860 X2760' }),
+      observation({ target: 'area', text: '4.876,92' }),
+      observation({ target: 'production', text: '12/09/2026\n17:14:31' }),
+      observation({ target: 'expiry', text: '11/12/26' }),
+      observation({ target: 'reference', text: '1 102893/1 30' }),
+      observation({ target: 'reference', text: '2' })
+    ];
+    for (const frame of frames) { accumulator.observe(frame); accumulator.observe(frame); }
+    const { fields } = accumulator.current();
+    expect(fields.supplierMaterialName.value).toBe('PAU FERRO');
+    expect(fields.quantitySheets.value).toBe(950);
+    expect(fields.quantitySheets.confidence).toBeLessThan(0.7);
+    expect(fields.declaredAreaM2.value).toBe(4876.92);
+    expect(fields.manufacturedAt.value).toBe('2026-09-12T17:14:31');
+    expect(fields.expiresOn.value).toBe('2026-12-11');
+    expect(fields.supplierOrderNumber.value).toBe('102893/130');
+    expect(fields.palletNumber.value).toBe(2);
+    expect(fields.lotCode.value).toBeNull();
+    expect(fields.supplierPalletCode.value).toBeNull();
+    expect(guidedCriticalComplete(accumulator.current())).toBe(false);
+  });
+
+  it('only collects the selected OCR field, preserving other values for a separate close-up', () => {
+    const accumulator = new GuidedScanAccumulator('SCHATTDECOR');
+    for (let i = 0; i < 2; i++) accumulator.observe(observation({ target: 'area', text: 'Lote D009260228\n6165.45' }));
+    expect(accumulator.current().fields.declaredAreaM2.value).toBe(6165.45);
+    expect(accumulator.current().fields.lotCode.value).toBeNull();
+    for (let i = 0; i < 2; i++) accumulator.observe(observation({ target: 'quantity', text: 'Peso (kg)\n1374' }));
+    expect(accumulator.current().fields.quantitySheets.value).toBeNull();
+  });
+
+  it('does not turn an impossible time into a substring that looks valid', () => {
+    const accumulator = new GuidedScanAccumulator('IMPRESS');
+    for (let i = 0; i < 2; i++) accumulator.observe(observation({ target: 'production', text: '12/09/2026\n47:14:31' }));
+    expect(accumulator.current().fields.manufacturedAt.value).toBe('2026-09-12');
+  });
   it('keeps ambiguous Schattdecor lots pending instead of accepting damaged OCR', () => {
     const accumulator = new GuidedScanAccumulator();
     for (let index = 0; index < 2; index++) accumulator.observe(observation({ text: 'SCHATTDECOR\nDesign\nCONVÉS' }));

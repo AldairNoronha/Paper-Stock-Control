@@ -11,6 +11,8 @@ describe('SSCC receipt persistence', () => {
     result.fields.supplierSscc = {
       value: '378989959000344929', confidence: 1, sources: ['MANUAL']
     };
+    result.fields.supplierOrderNumber = { value: '102893/130', confidence: 1, sources: ['MANUAL'] };
+    result.fields.palletNumber = { value: 2, confidence: 1, sources: ['MANUAL'] };
     result.detectedCodes = [{ format: 'CODE_128', value: '00378989959000364088' }];
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
       id: 'pallet-id', internal_code: 'PAP-000001', internal_qr: 'PSC:1:pallet-id'
@@ -23,6 +25,7 @@ describe('SSCC receipt persistence', () => {
 
     const request = fetchMock.mock.calls[0][1] as RequestInit;
     expect(JSON.parse(request.body as string).supplier_sscc).toBe('378989959000344929');
+    expect(JSON.parse(request.body as string).raw_label_payload.reviewed_fields).toEqual({ supplier_order_number: '102893/130', pallet_number: 2 });
     expect(request.headers).toMatchObject({ 'Idempotency-Key': 'stable-receipt-key' });
   });
 });

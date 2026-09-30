@@ -1,6 +1,17 @@
+import type { GuidedCaptureTarget } from './types';
+
 export interface FrameCaptureOptions {
   region?: 'focus' | 'full';
   maxWidth?: number;
+  focusHeight?: number;
+}
+
+export function cameraFocusHeight(target: GuidedCaptureTarget): number {
+  if (target === 'area' || target === 'expiry') return 0.26;
+  if (target === 'quantity' || target === 'dimensions' || target === 'reference' || target === 'production') return 0.32;
+  if (target === 'lot') return 0.3;
+  if (target === 'identity') return 0.36;
+  return 0.42;
 }
 
 export function captureVideoFrame(
@@ -12,7 +23,7 @@ export function captureVideoFrame(
   }
   const region = options.region ?? 'focus';
   const viewport = video.getBoundingClientRect();
-  const source = region === 'focus' ? focusRegion(video.videoWidth, video.videoHeight, viewport.width, viewport.height) : {
+  const source = region === 'focus' ? focusRegion(video.videoWidth, video.videoHeight, viewport.width, viewport.height, options.focusHeight) : {
     x: 0,
     y: 0,
     width: video.videoWidth,
@@ -79,7 +90,7 @@ export async function canvasToFile(
   return new File([blob], name, { type: 'image/jpeg', lastModified: Date.now() });
 }
 
-export function focusRegion(width: number, height: number, displayWidth = width, displayHeight = height) {
+export function focusRegion(width: number, height: number, displayWidth = width, displayHeight = height, focusHeight = 0.42) {
   // Match the centered object-fit: cover preview on portrait and landscape screens.
   const scale = displayWidth > 0 && displayHeight > 0
     ? Math.max(displayWidth / width, displayHeight / height)
@@ -87,7 +98,7 @@ export function focusRegion(width: number, height: number, displayWidth = width,
   const visibleWidth = displayWidth > 0 ? Math.min(width, displayWidth / scale) : width;
   const visibleHeight = displayHeight > 0 ? Math.min(height, displayHeight / scale) : height;
   const regionWidth = Math.round(visibleWidth * 0.9);
-  const regionHeight = Math.round(visibleHeight * 0.42);
+  const regionHeight = Math.round(visibleHeight * focusHeight);
   return {
     x: Math.round((width - regionWidth) / 2),
     y: Math.round((height - regionHeight) / 2),

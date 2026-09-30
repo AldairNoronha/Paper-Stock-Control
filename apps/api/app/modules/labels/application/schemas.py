@@ -6,7 +6,10 @@ from pydantic import BaseModel, Field, field_validator
 
 SupplierCode = Literal["IMPRESS", "SCHATTDECOR", "INTERPRINT", "UNKNOWN"]
 ReadingSource = Literal["QR", "BARCODE", "OCR", "CALCULATION", "MANUAL"]
-CaptureTarget = Literal["code", "identity", "quantity", "dimensions", "lot", "overview"]
+CaptureTarget = Literal[
+    "code", "identity", "quantity", "dimensions", "lot", "overview",
+    "area", "production", "expiry", "reference",
+]
 FieldValue = str | int | float
 
 

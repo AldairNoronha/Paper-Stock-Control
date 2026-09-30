@@ -166,7 +166,8 @@ export function LabelReader({ persistence }: LabelReaderProps = {}) {
       'quantitySheets',
       'widthMm',
       'lengthMm',
-      'declaredAreaM2'
+      'declaredAreaM2',
+      'palletNumber'
     ]);
     const parsedNumber = Number(value.replace(',', '.'));
     const normalized = numericFields.has(key)
@@ -452,6 +453,16 @@ function ReviewPanel({
           label="Código do pallet"
           field={result.fields.supplierPalletCode}
           onChange={(value) => onFieldChange('supplierPalletCode', value)}
+        />
+        <TextField
+          label="Pedido / ordem do fornecedor"
+          field={result.fields.supplierOrderNumber}
+          onChange={(value) => onFieldChange('supplierOrderNumber', value)}
+        />
+        <NumberField
+          label="Número do pallet na etiqueta"
+          field={result.fields.palletNumber}
+          onChange={(value) => onFieldChange('palletNumber', value)}
         />
         <TextField
           label={result.fields.supplier.value === 'IMPRESS' ? 'Código de barras (SSCC) *' : 'Código de barras (SSCC)'}

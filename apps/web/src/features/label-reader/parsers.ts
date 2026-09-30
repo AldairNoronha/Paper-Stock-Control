@@ -1,8 +1,10 @@
 import { ssccFromCodes, ssccFromText } from './sscc';
+import { spatialImportantFields } from './important-fields';
 import type {
   DetectedCode,
   FieldReading,
   LabelFields,
+  OcrWord,
   ReadingSource,
   SupplierCode
 } from './types';
@@ -11,6 +13,7 @@ interface ParserInput {
   text: string;
   ocrConfidence: number;
   codes: DetectedCode[];
+  words?: OcrWord[];
 }
 
 interface LabelParser {
@@ -32,6 +35,8 @@ export function emptyFields(): LabelFields {
     supplier: empty<SupplierCode>(),
     supplierMaterialName: empty<string>(),
     supplierPalletCode: empty<string>(),
+    supplierOrderNumber: empty<string>(),
+    palletNumber: empty<number>(),
     supplierSscc: empty<string>(),
     lotCode: empty<string>(),
     quantitySheets: empty<number>(),
@@ -166,6 +171,17 @@ export function parseLabel(input: ParserInput): {
 } {
   const parser = parsers.find((candidate) => candidate.matches(input));
   const fields = parser ? parser.parse(input) : parseUnknown(input);
+  if (input.words?.length) {
+    const spatial = spatialImportantFields(input.words, fields.supplier.value);
+    // Never use OCR text order to infer the other column: it may be the quantity.
+    if (spatial.widthMm?.value && !spatial.lengthMm?.value) fields.lengthMm = empty<number>();
+    if (spatial.lengthMm?.value && !spatial.widthMm?.value) fields.widthMm = empty<number>();
+    if (spatial.quantitySheets?.value) {
+      if (!spatial.widthMm && fields.widthMm.value === spatial.quantitySheets.value) fields.widthMm = empty<number>();
+      if (!spatial.lengthMm && fields.lengthMm.value === spatial.quantitySheets.value) fields.lengthMm = empty<number>();
+    }
+    Object.assign(fields, spatial);
+  }
   const barcodeSscc = ssccFromCodes(input.codes);
   fields.supplierSscc = barcodeSscc
     ? reading(barcodeSscc, 0.99, 'BARCODE')
@@ -194,6 +210,12 @@ function parseImpressOcr(input: ParserInput): LabelFields {
       confidence,
       'OCR'
     ),
+    supplierOrderNumber: reading(
+      firstMatch(text, [/(?:ORDER\s+NUMBER|N[ÚU]MERO\s+(?:DO\s+)?PEDIDO|ORDEM)\D{0,70}(\d{5,}\/\d{2,3})(?!\d)/i]), confidence, 'OCR'
+    ),
+    palletNumber: reading(
+      parseInteger(firstMatch(text, [/(?:NUM\.?\s*(?:OF|DO)?\s*PALLET|N[ÚU]M(?:ERO)?\.?\s*(?:DO)?\s*PALLET)\s*[:#-]?\s*(\d{1,3})(?!\d)/i])), confidence, 'OCR'
+    ),
     lotCode: reading(
       firstMatch(text, [/(?:LOTE|BATCH)\s*[:#-]?\s*([A-Z0-9][A-Z0-9/.-]{3,40})/i]),
       confidence,
@@ -210,7 +232,9 @@ function parseImpressOcr(input: ParserInput): LabelFields {
       parseLocalizedNumber(firstMatch(text, [/(?:QUANTITY|QUANTIDADE)\s*\(?M[²2]\)?\s*[:#-]?\s*([\d.,]+)/i])),
       confidence,
       'OCR'
-    )
+    ),
+    manufacturedAt: reading(parseDate(firstMatch(text, [/(?:DATA\s+(?:DE\s+)?PRODU[ÇC][ÃA]O|PRODUCTION\s+DATE|DATA\s+OF\s+PROD[^\n]*|DATE\s+OF\s+PROD[^\n]*)\s*[:#-]?\s*(\d{2}[./-]\d{2}[./-]\d{2,4}(?:\s+\d{2}:\d{2}(?::\d{2})?)?)/i]), true), confidence, 'OCR'),
+    expiresOn: reading(parseDate(firstMatch(text, [/(?:VALIDADE|VALIDITY|VALID\s+UNTIL|VALLET)\s*(?:\/\s*DATA\s+VALIDADE)?\s*[:#-]?\s*(\d{2}[./-]\d{2}[./-]\d{2,4})/i])), confidence, 'OCR')
   };
 }
 
@@ -236,6 +260,7 @@ function parseSchattdecorOcr(input: ParserInput): LabelFields {
     lotCode: barcodeLot
       ? reading(barcodeLot, 0.99, 'BARCODE')
       : reading(firstMatch(text, [/\b(D\d{8,12})\b/i]), confidence, 'OCR'),
+    supplierPalletCode: reading(firstMatch(text, [/\b(\d{1,3}-\d{3,6}-[A-Z])\b/i]), confidence, 'OCR'),
     quantitySheets: reading(quantity, confidence, 'OCR'),
     widthMm: reading(dimensions?.width ?? null, confidence, 'OCR'),
     lengthMm: reading(dimensions?.length ?? null, confidence, 'OCR'),
@@ -326,11 +351,14 @@ function standaloneQuantity(
 
 function parseDate(value: string | undefined | null, includeTime = false): string | null {
   if (!value) return null;
-  const match = /(\d{2})[./-](\d{2})[./-](\d{2,4})(?:\s+(\d{2}):(\d{2}))?/.exec(value);
+  const match = /(\d{2})[./-](\d{2})[./-](\d{2,4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?/.exec(value);
   if (!match) return null;
   const year = match[3].length === 2 ? `20${match[3]}` : match[3];
   const date = `${year}-${match[2]}-${match[1]}`;
-  return includeTime && match[4] ? `${date}T${match[4]}:${match[5]}:00` : date;
+  const parsed = new Date(`${date}T12:00:00Z`);
+  if (Number.isNaN(parsed.valueOf()) || !parsed.toISOString().startsWith(date)) return null;
+  const validTime = match[4] && Number(match[4]) < 24 && Number(match[5]) < 60 && Number(match[6] ?? 0) < 60;
+  return includeTime && validTime ? `${date}T${match[4]}:${match[5]}:${match[6] ?? '00'}` : date;
 }
 
 function cleanMaterial(value: string | null): string | null {

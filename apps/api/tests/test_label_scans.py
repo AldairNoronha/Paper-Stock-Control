@@ -56,6 +56,17 @@ def analysis_payload() -> dict[str, object]:
     }
 
 
+@pytest.mark.parametrize("target", ["area", "production", "expiry", "reference"])
+def test_highlighted_field_capture_targets(target: str) -> None:
+    capture = LabelCaptureSubmission.model_validate({
+        "target": target,
+        "field_names": ["supplierOrderNumber"],
+        "captured_at": "2026-09-30T13:00:00Z",
+        "quality": analysis_payload()["quality"],
+    })
+    assert capture.target == target
+
+
 def test_complete_analysis_is_ready() -> None:
     analysis = LabelAnalysisSubmission.model_validate(analysis_payload())
 

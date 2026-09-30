@@ -1,6 +1,7 @@
 import { recalculateAnalysis } from './analyzer';
 import { parseLabel } from './parsers';
 import { isValidSscc } from './sscc';
+import { focusedMaterial, TARGET_FIELDS } from './important-fields';
 import type {
   DetectedCode,
   FieldReading,
@@ -19,8 +20,8 @@ export const GUIDED_TARGETS: Record<GuidedCaptureTarget, { title: string; instru
     instruction: 'Aproxime a câmera do QR ou das barras e mantenha dentro da moldura.'
   },
   identity: {
-    title: 'Fornecedor e material',
-    instruction: 'Mostre o nome do fornecedor e a descrição do produto dentro da moldura.'
+    title: 'Material',
+    instruction: 'Mostre só o nome do papel: PAU FERRO, BRANCO NÓRDICO IMP ou a descrição equivalente.'
   },
   quantity: {
     title: 'Quantidade de folhas',
@@ -34,6 +35,10 @@ export const GUIDED_TARGETS: Record<GuidedCaptureTarget, { title: string; instru
     title: 'Lote ou pallet',
     instruction: 'Aponte para o lote, número do pallet ou código de produção.'
   },
+  area: { title: 'Área em m²', instruction: 'Enquadre somente o total em m², por exemplo 4.876,92. Não inclua o peso.' },
+  production: { title: 'Produção', instruction: 'Enquadre a data de produção e, se houver, a hora logo abaixo.' },
+  expiry: { title: 'Validade', instruction: 'Enquadre somente a data de validade, não a data de produção.' },
+  reference: { title: 'Pedido / nº do pallet', instruction: 'Enquadre ORDER NUMBER / pedido ou NUM. DO PALLET com seu valor.' },
   overview: {
     title: 'Visão geral',
     instruction: 'Mostre a parte principal da etiqueta para guardar a evidência final.'
@@ -78,8 +83,9 @@ export class GuidedScanAccumulator {
   private readonly rawTexts: string[] = [];
   private result: LabelAnalysisResult;
 
-  constructor() {
+  constructor(supplier: SupplierCode | null = null) {
     const parsed = parseLabel({ text: '', ocrConfidence: 0, codes: [] });
+    if (supplier && supplier !== 'UNKNOWN') parsed.fields.supplier = { value: supplier, confidence: 1, sources: ['MANUAL'] };
     this.result = recalculateAnalysis(
       {
         parserName: parsed.parserName,
@@ -118,6 +124,7 @@ export class GuidedScanAccumulator {
     const frameText = [supplierHint, observation.text.trim()].filter(Boolean).join('\n');
     const parsed = parseLabel({
       text: frameText,
+      words: observation.words,
       ocrConfidence: observation.ocrConfidence,
       codes
     });
@@ -134,6 +141,7 @@ export class GuidedScanAccumulator {
       const candidate = candidateFields[fieldName] as FieldReading<unknown>;
       if (candidate.value === null || candidate.value === '') continue;
       const trustedCode = candidate.sources.some((source) => source === 'QR' || source === 'BARCODE');
+      if (!trustedCode && !TARGET_FIELDS[observation.target].includes(fieldName)) continue;
       const normalized = normalizeCandidate(candidate.value);
       const previous = this.candidates.get(fieldName);
       const count = previous?.normalized === normalized ? previous.count + 1 : 1;
@@ -229,6 +237,10 @@ function applyTargetedFallbacks(
   const text = sourceText.replace(/\r/g, '').replace(/[ \t]+/g, ' ').trim();
   const confidence = Math.max(0.55, Math.min(0.9, ocrConfidence));
   const next = { ...fields };
+  if (/PESO|WEIGHT|\bKG\b/i.test(text) && !/FOLHAS|SHEETS|QUANT(?:ITY|IDADE)/i.test(text)
+    && !next.quantitySheets.sources.some((source) => source === 'QR' || source === 'BARCODE')) {
+    next.quantitySheets = { value: null, confidence: 0, sources: [] };
+  }
   if ((target === 'code' || target === 'identity') && !next.supplier.value) {
     const supplier = detectSupplier(text);
     if (supplier) next.supplier = reading(supplier, confidence, 'OCR');
@@ -238,7 +250,8 @@ function applyTargetedFallbacks(
       /(?:PRODUTO|DESIGN|DESCRI(?:ÇÃO|CAO)\s+PRODUTO)\s*[:#-]?\s*\n?\s*([^\n]{3,80})/i,
       /(?:REFERENCE\s+DESCRIPTION|REFER[ÊE]NCIA\s+DESCRI(?:ÇÃO|CAO))\s*[:#-]?\s*\n?\s*([^\n]{3,80})/i
     ]);
-    if (material) next.supplierMaterialName = reading(material, confidence, 'OCR');
+    const name = material ?? (next.supplier.value ? focusedMaterial(sourceText) : null);
+    if (name) next.supplierMaterialName = reading(name, Math.min(confidence, material ? 0.9 : 0.75), 'OCR');
   }
   if (target === 'quantity' && !next.quantitySheets.value) {
     const quantity = firstMatch(text, [
@@ -257,6 +270,42 @@ function applyTargetedFallbacks(
         next.lengthMm = reading(Math.max(first, second), confidence, 'OCR');
       }
     }
+  }
+  if (target === 'quantity' && !next.quantitySheets.value && next.supplier.value && !/PESO|WEIGHT|\bKG\b/i.test(text)) {
+    const candidates = [...text.matchAll(/^\s*(\d{2,5})\s*$/gm)];
+    if (candidates.length === 1) {
+      // Explicit close-up of one selected field is tentative, never 100% confidence.
+      next.quantitySheets = reading(Number(candidates[0][1]), Math.min(confidence, 0.65), 'OCR');
+    }
+  }
+  if (target === 'area' && !next.declaredAreaM2.value) {
+    const match = /(?<![\d.,])(\d{1,7}(?:[.,]\d{3})*[.,]\d{2})(?![\d.,])/.exec(text);
+    if (match && !/PESO|WEIGHT|\bKG\b/i.test(text)) {
+      const compact = match[1];
+      const value = Number(compact.includes(',') ? compact.replace(/\./g, '').replace(',', '.') : compact);
+      if (value > 0) next.declaredAreaM2 = reading(value, Math.min(confidence, 0.75), 'OCR');
+    }
+  }
+  if (target === 'production' || target === 'expiry') {
+    const dates = [...text.matchAll(/\b(\d{2})[./-](\d{2})[./-](\d{2,4})\b/g)];
+    if (dates.length === 1) {
+      const [, day, month, rawYear] = dates[0];
+      const year = rawYear.length === 2 ? `20${rawYear}` : rawYear;
+      const date = `${year}-${month}-${day}`;
+      const parsed = new Date(`${date}T12:00:00Z`);
+      if (!Number.isNaN(parsed.valueOf()) && parsed.toISOString().startsWith(date)) {
+        if (target === 'expiry' && !next.expiresOn.value) next.expiresOn = reading(date, Math.min(confidence, 0.8), 'OCR');
+        if (target === 'production' && !next.manufacturedAt.value) {
+          const time = /(?<![\d:])([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?(?![\d:])/.exec(text);
+          next.manufacturedAt = reading(time ? `${date}T${time[1]}:${time[2]}:${time[3] ?? '00'}` : date, Math.min(confidence, 0.8), 'OCR');
+        }
+      }
+    }
+  }
+  if (target === 'reference' && next.supplier.value === 'IMPRESS') {
+    const order = !/E-\d/i.test(text) ? /(?<!\d)(\d{6})\s*\/\s*(\d(?:[ \t]*\d){1,2})(?!\d)/.exec(text) : null;
+    if (!next.supplierOrderNumber.value && order) next.supplierOrderNumber = reading(`${order[1]}/${order[2].replace(/\s/g, '')}`, Math.min(confidence, 0.65), 'OCR');
+    if (!next.palletNumber.value && /^\d{1,3}$/.test(text)) next.palletNumber = reading(Number(text), Math.min(confidence, 0.6), 'OCR');
   }
   if (target === 'lot' && !next.lotCode.value && !next.supplierPalletCode.value) {
     const lot = firstMatch(text, next.supplier.value === 'SCHATTDECOR' ? [

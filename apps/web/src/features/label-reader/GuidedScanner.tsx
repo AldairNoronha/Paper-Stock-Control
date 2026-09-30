@@ -2,9 +2,9 @@ import { BrowserMultiFormatReader } from '@zxing/browser';
 import type { IScannerControls } from '@zxing/browser';
 import { BarcodeFormat, DecodeHintType } from '@zxing/library';
 import { useEffect, useId, useRef, useState } from 'react';
-import type { ChangeEvent } from 'react';
+import type { ChangeEvent, CSSProperties } from 'react';
 
-import { canvasToFile, captureVideoFrame, prepareOcrFrame } from './camera-frame';
+import { cameraFocusHeight, canvasToFile, captureVideoFrame, prepareOcrFrame } from './camera-frame';
 import { readLinearCode } from './code-reader';
 import {
   GUIDED_TARGETS,
@@ -21,7 +21,8 @@ import type {
   GuidedCaptureTarget,
   ImageQualityResult,
   LabelAnalysisResult,
-  LabelFields
+  LabelFields,
+  SupplierCode
 } from './types';
 
 interface GuidedScannerProps {
@@ -56,6 +57,8 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
   const evidenceRef = useRef<CaptureEvidence[]>([]);
   const targetRef = useRef<GuidedCaptureTarget>('identity');
   const activeRef = useRef(false);
+  const selectedTargetRef = useRef<GuidedCaptureTarget | null>(null);
+  const sessionRef = useRef(0);
 
   const [status, setStatus] = useState<ScannerStatus>('idle');
   const [result, setResult] = useState<LabelAnalysisResult | null>(null);
@@ -70,6 +73,7 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
   const [torchOn, setTorchOn] = useState(false);
   const [zoomCapability, setZoomCapability] = useState<ZoomCapability | null>(null);
   const [zoom, setZoom] = useState<number | null>(null);
+  const [supplierChoice, setSupplierChoice] = useState<SupplierCode | ''>('');
 
   useEffect(() => () => {
     stopResources();
@@ -77,11 +81,13 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
 
   async function startCamera() {
     if (status === 'requesting' || status === 'scanning') return;
-    accumulatorRef.current = new GuidedScanAccumulator();
-    resultRef.current = null;
+    const session = ++sessionRef.current;
+    accumulatorRef.current = new GuidedScanAccumulator(supplierChoice || null);
+    resultRef.current = supplierChoice ? accumulatorRef.current.current() : null;
     evidenceRef.current = [];
     targetRef.current = 'identity';
-    setResult(null);
+    selectedTargetRef.current = null;
+    setResult(resultRef.current);
     setHasCode(false);
     setTarget('identity');
     setTextStatus('Preparando leitura de texto…');
@@ -104,6 +110,7 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
           frameRate: { ideal: 24, max: 30 }
         }
       });
+      if (sessionRef.current !== session) { stream.getTracks().forEach((track) => track.stop()); return; }
       streamRef.current = stream;
       const video = videoRef.current;
       if (!video) throw new Error('A visualização da câmera não foi encontrada.');
@@ -181,7 +188,7 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
     const video = videoRef.current;
     if (!video || !activeRef.current) return;
     try {
-      const frame = captureVideoFrame(video, { region: 'focus' });
+      const frame = captureVideoFrame(video, { region: 'full' });
       const quality = checkCanvasQuality(frame, 'live');
       const observed = accumulatorRef.current.observe({
         text: '',
@@ -207,9 +214,11 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
     const video = videoRef.current;
     const ocr = ocrRef.current;
     if (!video || !ocr || busyRef.current || !activeRef.current) return;
+    const session = sessionRef.current;
     busyRef.current = true;
     try {
-      const frame = captureVideoFrame(video, { region: 'focus' });
+      const currentTarget = targetRef.current;
+      const frame = captureVideoFrame(video, { region: 'focus', focusHeight: cameraFocusHeight(currentTarget) });
       const quality = checkCanvasQuality(frame, 'live');
       const blockingIssue = quality.issues.find((issue) => issue.severity === 'error');
       if (blockingIssue) {
@@ -218,7 +227,6 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
         return;
       }
       setQualityMessage(null);
-      const currentTarget = targetRef.current;
       if (currentTarget === 'code') {
         // A multi-format video reader may keep returning the QR. Search bars independently.
         const barcode = await readLinearCode(frame);
@@ -243,8 +251,10 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
         currentTarget,
         (progress) => setOcrProgress(progress)
       );
+      if (!activeRef.current || sessionRef.current !== session) return;
       const observed = accumulatorRef.current.observe({
         text: recognized.text,
+        words: recognized.words,
         ocrConfidence: recognized.confidence,
         codes: [],
         quality,
@@ -273,10 +283,10 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
   function updateFromObservation(nextResult: LabelAnalysisResult) {
     resultRef.current = nextResult;
     setResult(nextResult);
-    const nextTarget = nextGuidedTarget(nextResult);
+    const nextTarget = selectedTargetRef.current ?? nextGuidedTarget(nextResult);
     targetRef.current = nextTarget;
     setTarget(nextTarget);
-    if (guidedCriticalComplete(nextResult)) {
+    if (guidedCriticalComplete(nextResult) && !selectedTargetRef.current) {
       if (intervalRef.current !== null) window.clearInterval(intervalRef.current);
       intervalRef.current = null;
       activeRef.current = false;
@@ -284,8 +294,21 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
       setMessage('Campos obrigatórios encontrados. Revise os valores antes de confirmar.');
     } else {
       setMessage(nextTarget === 'code' && nextResult.fields.supplier.value === 'IMPRESS'
-        ? 'O QR já pode estar completo. Aproxime agora das barras e do número impresso após (00).'
+        ? 'Aproxime das barras ou do número após (00). Esse identificador não é o pedido nem o nº do pallet.'
         : GUIDED_TARGETS[nextTarget].instruction);
+    }
+  }
+
+  function chooseTarget(nextTarget: GuidedCaptureTarget | null) {
+    selectedTargetRef.current = nextTarget;
+    const current = nextTarget ?? nextGuidedTarget(resultRef.current);
+    targetRef.current = current;
+    setTarget(current);
+    setMessage(GUIDED_TARGETS[current].instruction);
+    if (status === 'ready') {
+      activeRef.current = true;
+      setStatus('scanning');
+      intervalRef.current = window.setInterval(() => void sampleFrame(), 1400);
     }
   }
 
@@ -296,7 +319,9 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
     fieldNames: (keyof LabelFields)[]
   ) {
     if (fieldNames.length === 0) return;
+    const session = sessionRef.current;
     const file = await canvasToFile(canvas, `${evidenceTarget}-${Date.now()}.jpg`, 0.88);
+    if (sessionRef.current !== session) return;
     const evidence: CaptureEvidence = {
       target: evidenceTarget,
       fieldNames,
@@ -373,6 +398,7 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
   }
 
   function stopResources(): Promise<void> {
+    sessionRef.current += 1;
     activeRef.current = false;
     if (intervalRef.current !== null) window.clearInterval(intervalRef.current);
     intervalRef.current = null;
@@ -391,11 +417,22 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
   const checklist = guidedChecklist(result);
   const completeCount = checklist.filter((item) => item.complete).length;
   const scanning = status === 'scanning' || status === 'ready' || status === 'requesting';
+  const currentReading = result ? focusedValue(result.fields, target) : null;
 
   return (
     <div className="guided-scanner">
       {!scanning && (
         <div className="scanner-start">
+          <label className="supplier-choice">
+            Fornecedor da etiqueta
+            <select value={supplierChoice} onChange={(event) => setSupplierChoice(event.target.value as SupplierCode | '')}>
+              <option value="">Identificar automaticamente</option>
+              <option value="IMPRESS">Impress</option>
+              <option value="SCHATTDECOR">Schattdecor</option>
+              <option value="INTERPRINT">Interprint</option>
+            </select>
+            <small>Escolha para ler apenas os campos, sem precisar mostrar o logotipo.</small>
+          </label>
           <button className="camera-button" type="button" onClick={() => void startCamera()}>
             <CameraIcon />
             <span>Iniciar leitura guiada</span>
@@ -408,7 +445,23 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
       )}
 
       <div className={`live-camera ${scanning ? 'visible' : ''}`}>
-        <div className="video-stage">
+        <div className="field-targets" aria-label="Campo que deseja ler">
+          {(['identity', 'quantity', 'dimensions', 'lot'] as GuidedCaptureTarget[]).map((item) => (
+            <button key={item} className="target-button" type="button" aria-pressed={target === item}
+              onClick={() => chooseTarget(item)}>{GUIDED_TARGETS[item].title}</button>
+          ))}
+          <button className="target-button" type="button" onClick={() => chooseTarget(null)}>Auto</button>
+        </div>
+        <details className="capture-extras">
+          <summary>Ler complementos: área, datas e referências</summary>
+          <div className="field-targets">
+            {(['area', 'production', 'expiry', 'reference', 'code'] as GuidedCaptureTarget[]).map((item) => (
+              <button key={item} className="target-button" type="button" aria-pressed={target === item}
+                onClick={() => chooseTarget(item)}>{GUIDED_TARGETS[item].title}</button>
+            ))}
+          </div>
+        </details>
+        <div className="video-stage" style={{ '--focus-inset': `${(1 - cameraFocusHeight(target)) * 50}%` } as CSSProperties}>
           <video ref={videoRef} autoPlay muted playsInline aria-label="Câmera traseira para leitura da etiqueta" />
           <div className="focus-guide" aria-hidden="true">
             <span />
@@ -429,6 +482,7 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
         {scanning && <p className="ocr-status" role="status">{status === 'ready'
           ? 'Leitura concluída. Confira os valores na revisão.'
           : textStatus}</p>}
+        {currentReading && <div className="focused-reading" aria-live="polite"><strong>{GUIDED_TARGETS[target].title}</strong><span>{currentReading}</span></div>}
         {ocrProgress !== null && (
           <div className="live-progress" role="status">
             <span style={{ width: `${Math.max(8, ocrProgress * 100)}%` }} />
@@ -498,6 +552,21 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
       />
     </div>
   );
+}
+
+function focusedValue(fields: LabelFields, target: GuidedCaptureTarget): string | null {
+  switch (target) {
+    case 'identity': return fields.supplierMaterialName.value;
+    case 'quantity': return fields.quantitySheets.value === null ? null : `${fields.quantitySheets.value} folhas`;
+    case 'dimensions': return fields.widthMm.value && fields.lengthMm.value ? `${fields.widthMm.value} × ${fields.lengthMm.value} mm` : null;
+    case 'lot': return fields.lotCode.value ?? fields.supplierPalletCode.value;
+    case 'code': return fields.supplierSscc.value;
+    case 'area': return fields.declaredAreaM2.value === null ? null : `${fields.declaredAreaM2.value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 3 })} m²`;
+    case 'production': return fields.manufacturedAt.value;
+    case 'expiry': return fields.expiresOn.value;
+    case 'reference': return [fields.supplierOrderNumber.value ? `Pedido ${fields.supplierOrderNumber.value}` : '', fields.palletNumber.value ? `Pallet ${fields.palletNumber.value}` : ''].filter(Boolean).join(' · ') || null;
+    default: return null;
+  }
 }
 
 function notifyAccepted() {
