@@ -113,6 +113,7 @@ async def test_scan_persists_image_metadata_and_field_evidence() -> None:
                 "quantitySheets",
             }
 
+        async with session_factory() as session:
             with pytest.raises(LabelScanConflictError, match="already registered"):
                 await LabelScanService(session, storage).register(
                     filename="label.jpg",
