@@ -27,6 +27,21 @@ function observation(partial: Partial<GuidedObservation>): GuidedObservation {
 }
 
 describe('guided scan accumulator', () => {
+  it('confirms the prominent name from broad label OCR twice and then advances to quantity', () => {
+    const scan = new GuidedScanAccumulator('SCHATTDECOR');
+    const frame = observation({ text: 'Floraplac MDF LTDA\nMadeira Oa\nSamos — LENHO\nINN',
+      words: [
+        { text: 'Floraplac', confidence: 0.83, bbox: { x0: 23, y0: 194, x1: 299, y1: 276 } },
+        { text: 'Madeira', confidence: 0.93, bbox: { x0: 26, y0: 314, x1: 263, y1: 361 } },
+        { text: 'MDF', confidence: 0.96, bbox: { x0: 324, y0: 200, x1: 447, y1: 247 } },
+        { text: 'LENHO', confidence: 0.82, bbox: { x0: 942, y0: 336, x1: 1457, y1: 439 } }
+      ] });
+    expect(scan.observe(frame).result.fields.supplierMaterialName.value).toBeNull();
+    const result = scan.observe(frame).result;
+    expect(result.fields.supplierMaterialName.value).toBe('LENHO');
+    expect(result.fields.quantitySheets.value).toBeNull();
+    expect(nextGuidedTarget(result)).toBe('quantity');
+  });
   it('requires an isolated quantity close-up when headers are lost, not a row containing weight', () => {
     const accumulator = new GuidedScanAccumulator('SCHATTDECOR');
     const ambiguous = observation({ target: 'quantity', text: '2765 1865 810\n1038' });

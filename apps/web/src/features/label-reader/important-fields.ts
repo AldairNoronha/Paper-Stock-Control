@@ -3,6 +3,7 @@ import type { FieldReading, GuidedCaptureTarget, LabelFields, OcrWord, SupplierC
 const normalize = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 const center = (word: OcrWord) => (word.bbox.x0 + word.bbox.x1) / 2;
 const height = (word: OcrWord) => word.bbox.y1 - word.bbox.y0;
+const MATERIAL_EXCLUSIONS = /IMPRESS|SCHAT[TIL1]DECOR|INTERPRINT|FLORAPLAC|CLIENTE|CUSTOMER|LOTE|BATCH|SHEETS|FOLHAS|LARGURA|COMPRIMENTO|PESO|WEIGHT|PRODU[CÇ][AÃ]O|VALIDADE|ORDER|PALLET|SUPERIOR|MATERIAL\s*NR|^(?:MDF|LTDA|PRODUTO|DESIGN|TOTAL|AREA|QUANTITY|QUANTIDADE|ALTGR|SHIFT|CTRL|ENTER|BACKSPACE|WINDOWS|CAPS|ESC|TAB|ALT|FN)$/i;
 
 function reading<T>(value: T, confidence: number): FieldReading<T> {
   return { value, confidence: Math.max(0, Math.min(0.9, confidence)), sources: ['OCR'] };
@@ -39,6 +40,10 @@ function below(words: OcrWord[], anchor: OcrWord, valid: (text: string) => boole
 
 export function spatialImportantFields(words: OcrWord[], supplier: SupplierCode | null): Partial<LabelFields> {
   const fields: Partial<LabelFields> = {};
+  if (supplier === 'SCHATTDECOR') {
+    const material = prominentSchattdecorMaterial(words);
+    if (material) fields.supplierMaterialName = material;
+  }
   const matchedWords = new Map<keyof LabelFields, OcrWord>();
   const numericHeaders: Array<[keyof LabelFields, RegExp, (value: number) => boolean]> = [
     ['quantitySheets', /^(?:FOLHAS|SHEETS|SHEET)$/, (n) => Number.isInteger(n) && n >= 1 && n <= 20000],
@@ -77,11 +82,44 @@ export function spatialImportantFields(words: OcrWord[], supplier: SupplierCode 
   return fields;
 }
 
+export function prominentSchattdecorMaterial(words: OcrWord[]): FieldReading<string> | null {
+  // A broad label has both the small product description and a large trade name.
+  // Require actual label context, a readable uppercase name and size dominance.
+  const labelContext = words.some((word) => /FLORAPLAC|SCHAT[TIL1]DECOR|CLIENTE|CUSTOMER|DESIGN|FOLHAS|LOTE|^D\d{8,12}$/i.test(word.text));
+  if (!labelContext) return null;
+  const credible = words.filter((word) => word.confidence >= 0.55 && height(word) > 0 && /[A-ZÀ-Ý]{2}/i.test(word.text));
+  const sameRow = (a: OcrWord, b: OcrWord) => Math.abs((a.bbox.y0 + a.bbox.y1 - b.bbox.y0 - b.bbox.y1) / 2) <= Math.max(height(a), height(b)) * 0.45;
+  const companyWords = credible.filter((word) => /FLORAPLAC|SCHAT[TIL1]DECOR|CLIENTE|CUSTOMER|^(?:MDF|LTDA)$/i.test(word.text.trim()));
+  const candidates = credible.filter((word) => {
+    const text = word.text.trim().replace(/^[^A-ZÀ-Ý]+|[^A-ZÀ-Ý]+$/g, '');
+    const companyRow = companyWords.some((anchor) => word.bbox.y0 <= anchor.bbox.y1 && sameRow(word, anchor));
+    return /^[A-ZÀ-Ý]{2,24}(?:-[A-ZÀ-Ý]+)?$/.test(text) && !MATERIAL_EXCLUSIONS.test(text) && !companyRow;
+  }).sort((a, b) => height(b) - height(a));
+  const largest = candidates[0];
+  if (!largest) return null;
+  const largeWords = candidates.filter((word) => height(word) >= height(largest) * 0.7);
+  const bodyHeights = credible.filter((word) => !largeWords.includes(word)).map(height).sort((a, b) => a - b);
+  const medianBody = bodyHeights[Math.floor(bodyHeights.length / 2)];
+  if (medianBody && height(largest) < medianBody * 1.5) return null;
+  const row = largeWords.filter((word) => sameRow(word, largest)).sort((a, b) => a.bbox.x0 - b.bbox.x0);
+  // Do not combine two distant blocks merely because their font sizes match.
+  for (let i = 1; i < row.length; i++) if (row[i].bbox.x0 - row[i - 1].bbox.x1 > height(largest) * 2) return null;
+  const left = row[0].bbox.x0;
+  const bottom = Math.max(...row.map((word) => word.bbox.y1));
+  const secondRow = largeWords.filter((word) => !row.includes(word) && word.bbox.y0 >= bottom - height(largest) * 0.2
+    && word.bbox.y0 <= bottom + height(largest) * 1.2).sort((a, b) => a.bbox.x0 - b.bbox.x0);
+  if (secondRow.length && Math.abs(secondRow[0].bbox.x0 - left) <= height(largest)) row.push(...secondRow);
+  // Another equally large unrelated name is ambiguous, not an invitation to guess.
+  if (largeWords.some((word) => !row.includes(word))) return null;
+  const name = row.map((word) => word.text.trim().replace(/^[^A-ZÀ-Ý]+|[^A-ZÀ-Ý]+$/g, '')).join(' ');
+  if (name.length < 4 || name.length > 80) return null;
+  return reading(name, Math.min(0.75, ...row.map((word) => word.confidence)));
+}
+
 export function focusedMaterial(text: string): string | null {
   // Large whitespace separates the name from staple/noise glyphs beside it.
   const lines = text.split('\n').map((line) => line.trim().split(/[ \t]{3,}/)[0]).filter(Boolean);
-  const unwanted = /IMPRESS|SCHAT[TIL1]DECOR|INTERPRINT|FLORAPLAC|CLIENTE|CUSTOMER|LOTE|BATCH|SHEETS|FOLHAS|LARGURA|COMPRIMENTO|PESO|WEIGHT|PRODU[CÇ][AÃ]O|VALIDADE|ORDER|PALLET|SUPERIOR|MATERIAL\s*NR/i;
-  const clean = lines.filter((line) => /[A-ZÀ-Ý]{2}/i.test(line) && !unwanted.test(line) && !/^(?:PRODUTO|DESIGN|NOME IMPRESS|DESCRI[CÇ][AÃ]O.*)$/i.test(line));
+  const clean = lines.filter((line) => /[A-ZÀ-Ý]{2}/i.test(line) && !MATERIAL_EXCLUSIONS.test(line) && !/^(?:PRODUTO|DESIGN|NOME IMPRESS|DESCRI[CÇ][AÃ]O.*)$/i.test(line));
   if (clean.length === 0 || clean.length > 3) return null;
   const material = clean.join(' ').replace(/\s+/g, ' ').trim();
   if (material.length < 4 || material.length > 100 || !/[A-ZÀ-Ý]{3}/i.test(material) || /\d{6,}|^E-|^D\d/i.test(material)) return null;

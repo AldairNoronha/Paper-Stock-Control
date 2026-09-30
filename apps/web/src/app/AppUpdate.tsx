@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
-export const APP_RELEASE = '2026.09.30.2';
+export const APP_RELEASE = '2026.09.30.3';
 
 export function AppUpdate() {
   const registrationRef = useRef<ServiceWorkerRegistration | null>(null);

@@ -78,7 +78,7 @@ const impressParser: LabelParser = {
 
 const schattdecorParser: LabelParser = {
   name: 'SchattdecorLabelParser',
-  version: '1.2.0',
+  version: '1.3.0',
   matches: ({ text, codes }) =>
     /\bSCHAT[TIL1]DECOR\b/i.test(text) ||
     codes.some((code) => /^D\d{8,12}$/i.test(code.value)) ||
