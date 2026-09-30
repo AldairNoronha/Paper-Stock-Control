@@ -73,9 +73,9 @@ const impressParser: LabelParser = {
 
 const schattdecorParser: LabelParser = {
   name: 'SchattdecorLabelParser',
-  version: '1.0.0',
+  version: '1.1.0',
   matches: ({ text, codes }) =>
-    /SCHATTDECOR/i.test(text) ||
+    /\bSCHAT[TIL1]DECOR\b/i.test(text) ||
     codes.some((code) => /^D\d{8,12}$/i.test(code.value)) ||
     codes.some((code) => code.value.split('|').length >= 7),
   parse(input) {
@@ -190,7 +190,7 @@ function parseImpressOcr(input: ParserInput): LabelFields {
       'OCR'
     ),
     supplierPalletCode: reading(
-      firstMatch(text, [/\b(E-\d{5,}\/\d{2,3}(?:-[A-Z0-9]+)+)\b/i]),
+      firstMatch(text, [/\b(E-\d{5,}\/\d{2,3}(?:-[A-Z0-9]+){3,})(?![A-Z0-9./-])/i]),
       confidence,
       'OCR'
     ),
@@ -200,7 +200,7 @@ function parseImpressOcr(input: ParserInput): LabelFields {
       'OCR'
     ),
     quantitySheets: reading(
-      parseInteger(firstMatch(text, [/(?:QUANTITY\s+SHEETS?|QTD\.?\s*FOLHAS?)\s*[:#-]?\s*(\d{2,5})/i])),
+      parseInteger(firstMatch(text, [/(?:QUANTITY\s+SHEETS?\s*(?:\(\s*QTD\.?\s*FOLHAS?\s*\))?|QTD\.?\s*FOLHAS?)\s*[:#-]?\s*(\d{2,5})/i])),
       confidence,
       'OCR'
     ),
@@ -224,7 +224,7 @@ function parseSchattdecorOcr(input: ParserInput): LabelFields {
     standaloneQuantity(text, dimensions);
   return {
     ...emptyFields(),
-    supplier: reading('SCHATTDECOR', barcodeLot ? 0.99 : 0.98, barcodeLot ? 'BARCODE' : 'OCR'),
+    supplier: reading('SCHATTDECOR', barcodeLot ? 0.99 : /SCHATTDECOR/i.test(text) ? 0.98 : 0.7, barcodeLot ? 'BARCODE' : 'OCR'),
     supplierMaterialName: reading(
       firstMatch(text, [
         /(?:DESCRI[ÇC][ÃA]O\s+PRODUTO|DESIGN)\s*[:#-]?\s*\n?\s*([A-ZÀ-Ý][A-ZÀ-Ý\s-]{2,30})/i,

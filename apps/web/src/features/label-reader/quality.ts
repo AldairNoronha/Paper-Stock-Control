@@ -1,19 +1,21 @@
 import type { ImageQualityResult, QualityIssue } from './types';
 
 const SAMPLE_MAX_SIZE = 720;
+type QualityMode = 'photo' | 'live';
 
 export function checkImageQuality(image: HTMLImageElement): ImageQualityResult {
   return checkVisualSource(image, image.naturalWidth, image.naturalHeight);
 }
 
-export function checkCanvasQuality(canvas: HTMLCanvasElement): ImageQualityResult {
-  return checkVisualSource(canvas, canvas.width, canvas.height);
+export function checkCanvasQuality(canvas: HTMLCanvasElement, mode: QualityMode = 'photo'): ImageQualityResult {
+  return checkVisualSource(canvas, canvas.width, canvas.height, mode);
 }
 
 function checkVisualSource(
   source: CanvasImageSource,
   sourceWidth: number,
-  sourceHeight: number
+  sourceHeight: number,
+  mode: QualityMode = 'photo'
 ): ImageQualityResult {
   const scale = Math.min(1, SAMPLE_MAX_SIZE / Math.max(sourceWidth, sourceHeight));
   const canvas = document.createElement('canvas');
@@ -40,7 +42,7 @@ function checkVisualSource(
   const contrast = Math.sqrt(squaredDifference / grayscale.length);
   const sharpness = laplacianVariance(grayscale, canvas.width, canvas.height);
   const megapixels = (sourceWidth * sourceHeight) / 1_000_000;
-  const issues = buildIssues(sourceWidth, sourceHeight, brightness, contrast, sharpness);
+  const issues = assessQualityIssues(sourceWidth, sourceHeight, brightness, contrast, sharpness, mode);
 
   return {
     width: sourceWidth,
@@ -77,25 +79,32 @@ function laplacianVariance(pixels: Float32Array, width: number, height: number):
   return squaredSum / count - mean * mean;
 }
 
-function buildIssues(
+export function assessQualityIssues(
   width: number,
   height: number,
   brightness: number,
   contrast: number,
-  sharpness: number
+  sharpness: number,
+  mode: QualityMode = 'photo'
 ): QualityIssue[] {
   const issues: QualityIssue[] = [];
   const pixels = width * height;
-  if (pixels < 350_000 || width < 850) {
+  // Assess native pixels before OCR enlargement. Live crops are not whole photos.
+  const tooSmall = mode === 'live'
+    ? pixels < 40_000 || width < 240 || height < 100
+    : pixels < 350_000 || width < 850;
+  if (tooSmall) {
     issues.push({
       severity: 'error',
       code: 'LOW_RESOLUTION',
-      message: 'Aproxime o celular: a etiqueta ficou pequena na fotografia.'
+      message: mode === 'live'
+        ? 'A área da câmera é pequena demais. Tente outra câmera ou use uma foto.'
+        : 'Aproxime o celular: a etiqueta ficou pequena na fotografia.'
     });
   }
   if (brightness < 35) {
     issues.push({ severity: 'error', code: 'TOO_DARK', message: 'A foto está muito escura. Use mais luz.' });
-  } else if (brightness > 245) {
+  } else if (brightness > 245 && (mode === 'photo' || contrast < 20)) {
     issues.push({ severity: 'error', code: 'TOO_BRIGHT', message: 'A foto está estourada. Evite reflexos na etiqueta.' });
   }
   if (contrast < 12) {

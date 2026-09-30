@@ -249,6 +249,7 @@ h1 {
   font-weight: 900;
 }
 .frame-warning { padding: 0.75rem 0.9rem; border-radius: 0.75rem; background: #fff3d8; color: #79500d; font-size: 0.84rem; font-weight: 700; }
+.ocr-status { margin: 0; color: #52675f; font-size: 0.84rem; line-height: 1.5; }
 .live-progress { height: 0.35rem; overflow: hidden; border-radius: 1rem; background: #dce7e1; }
 .live-progress span { display: block; height: 100%; border-radius: inherit; background: #2c9b62; transition: width 180ms ease; }
 .scanner-tools { display: flex; align-items: center; gap: 0.8rem; }

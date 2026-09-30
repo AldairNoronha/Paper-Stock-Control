@@ -54,16 +54,15 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
   const accumulatorRef = useRef(new GuidedScanAccumulator());
   const resultRef = useRef<LabelAnalysisResult | null>(null);
   const evidenceRef = useRef<CaptureEvidence[]>([]);
-  const hasCodeRef = useRef(false);
-  const initialCodePassRef = useRef(false);
-  const attemptsRef = useRef(0);
-  const targetRef = useRef<GuidedCaptureTarget>('code');
+  const targetRef = useRef<GuidedCaptureTarget>('identity');
+  const activeRef = useRef(false);
 
   const [status, setStatus] = useState<ScannerStatus>('idle');
   const [result, setResult] = useState<LabelAnalysisResult | null>(null);
-  const [target, setTarget] = useState<GuidedCaptureTarget>('code');
+  const [target, setTarget] = useState<GuidedCaptureTarget>('identity');
   const [hasCode, setHasCode] = useState(false);
-  const [message, setMessage] = useState(GUIDED_TARGETS.code.instruction);
+  const [message, setMessage] = useState(GUIDED_TARGETS.identity.instruction);
+  const [textStatus, setTextStatus] = useState('Preparando leitura de texto…');
   const [qualityMessage, setQualityMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ocrProgress, setOcrProgress] = useState<number | null>(null);
@@ -81,13 +80,11 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
     accumulatorRef.current = new GuidedScanAccumulator();
     resultRef.current = null;
     evidenceRef.current = [];
-    hasCodeRef.current = false;
-    initialCodePassRef.current = false;
-    attemptsRef.current = 0;
-    targetRef.current = 'code';
+    targetRef.current = 'identity';
     setResult(null);
     setHasCode(false);
-    setTarget('code');
+    setTarget('identity');
+    setTextStatus('Preparando leitura de texto…');
     setTorchOn(false);
     setStatus('requesting');
     setError(null);
@@ -116,12 +113,13 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
       startCodeReader(stream, video);
       const ocr = new OcrSession();
       ocrRef.current = ocr;
+      activeRef.current = true;
       void ocr.initialize((progress) => setOcrProgress(progress)).catch(() => {
-        setQualityMessage('O OCR não iniciou. QR e códigos continuam ativos; também é possível revisar manualmente.');
+        setTextStatus('Não foi possível iniciar a leitura de texto. Use uma foto ou tente novamente.');
       });
       intervalRef.current = window.setInterval(() => void sampleFrame(), 1400);
       setStatus('scanning');
-      setMessage(GUIDED_TARGETS.code.instruction);
+      setMessage(GUIDED_TARGETS.identity.instruction);
     } catch (caught) {
       stopResources();
       setStatus('error');
@@ -181,10 +179,10 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
 
   async function acceptCode(code: DetectedCode) {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || !activeRef.current) return;
     try {
       const frame = captureVideoFrame(video, { region: 'focus' });
-      const quality = checkCanvasQuality(frame);
+      const quality = checkCanvasQuality(frame, 'live');
       const observed = accumulatorRef.current.observe({
         text: '',
         ocrConfidence: 0,
@@ -194,7 +192,6 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
         capturedAt: new Date().toISOString()
       });
       if (observed.newCode) {
-        hasCodeRef.current = true;
         setHasCode(true);
         updateFromObservation(observed.result);
         await saveEvidence(frame, quality, 'code', observed.acceptedFields);
@@ -209,19 +206,18 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
   async function sampleFrame() {
     const video = videoRef.current;
     const ocr = ocrRef.current;
-    if (!video || !ocr || busyRef.current || status === 'ready') return;
+    if (!video || !ocr || busyRef.current || !activeRef.current) return;
     busyRef.current = true;
     try {
       const frame = captureVideoFrame(video, { region: 'focus' });
-      const quality = checkCanvasQuality(frame);
+      const quality = checkCanvasQuality(frame, 'live');
       const blockingIssue = quality.issues.find((issue) => issue.severity === 'error');
       if (blockingIssue) {
         setQualityMessage(blockingIssue.message);
+        setTextStatus('Leitura de texto aguardando uma imagem mais nítida.');
         return;
       }
       setQualityMessage(null);
-      attemptsRef.current += 1;
-      if (attemptsRef.current >= 3) initialCodePassRef.current = true;
       const currentTarget = targetRef.current;
       if (currentTarget === 'code') {
         // A multi-format video reader may keep returning the QR. Search bars independently.
@@ -231,7 +227,6 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
             text: '', ocrConfidence: 0, codes: [barcode], quality,
             target: 'code', capturedAt: new Date().toISOString()
           });
-          hasCodeRef.current = true;
           setHasCode(true);
           updateFromObservation(observed.result);
           if (observed.newCode) {
@@ -242,6 +237,7 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
         }
       }
       setOcrProgress(0);
+      setTextStatus('Lendo o texto da área destacada — QR não é necessário.');
       const recognized = await ocr.recognize(
         prepareOcrFrame(frame),
         currentTarget,
@@ -255,6 +251,12 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
         target: currentTarget,
         capturedAt: new Date().toISOString()
       });
+      if (!activeRef.current) return;
+      setTextStatus(recognized.text
+        ? observed.acceptedFields.length > 0
+          ? 'Dados coletados pelo texto. Continue para a próxima área.'
+          : 'Texto detectado. Mantenha a área parada para confirmar os campos.'
+        : 'Nenhum texto legível nesta área. Aproxime das letras e números.');
       updateFromObservation(observed.result);
       if (observed.acceptedFields.length > 0) {
         await saveEvidence(frame, quality, currentTarget, observed.acceptedFields);
@@ -271,16 +273,13 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
   function updateFromObservation(nextResult: LabelAnalysisResult) {
     resultRef.current = nextResult;
     setResult(nextResult);
-    const nextTarget = nextGuidedTarget(
-      nextResult,
-      hasCodeRef.current,
-      initialCodePassRef.current
-    );
+    const nextTarget = nextGuidedTarget(nextResult);
     targetRef.current = nextTarget;
     setTarget(nextTarget);
     if (guidedCriticalComplete(nextResult)) {
       if (intervalRef.current !== null) window.clearInterval(intervalRef.current);
       intervalRef.current = null;
+      activeRef.current = false;
       setStatus('ready');
       setMessage('Campos obrigatórios encontrados. Revise os valores antes de confirmar.');
     } else {
@@ -374,6 +373,7 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
   }
 
   function stopResources(): Promise<void> {
+    activeRef.current = false;
     if (intervalRef.current !== null) window.clearInterval(intervalRef.current);
     intervalRef.current = null;
     controlsRef.current?.stop();
@@ -426,6 +426,9 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
         </div>
 
         {qualityMessage && <div className="frame-warning">{qualityMessage}</div>}
+        {scanning && <p className="ocr-status" role="status">{status === 'ready'
+          ? 'Leitura concluída. Confira os valores na revisão.'
+          : textStatus}</p>}
         {ocrProgress !== null && (
           <div className="live-progress" role="status">
             <span style={{ width: `${Math.max(8, ocrProgress * 100)}%` }} />
@@ -456,7 +459,7 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
         <div className="capture-checklist">
           <div className={`checklist-item ${hasCode ? 'complete' : ''}`}>
             <span>{hasCode ? '✓' : '○'}</span>
-            <div><strong>QR / código</strong><small>{hasCode ? 'Encontrado' : 'Leitura continua ativa'}</small></div>
+            <div><strong>QR / código</strong><small>{hasCode ? 'Encontrado' : 'Opcional'}</small></div>
           </div>
           {checklist.map((item) => (
             <div className={`checklist-item ${item.complete ? 'complete' : ''}`} key={item.key}>

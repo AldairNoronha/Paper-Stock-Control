@@ -11,7 +11,8 @@ export function captureVideoFrame(
     throw new Error('A câmera ainda está ajustando a imagem. Aguarde um instante.');
   }
   const region = options.region ?? 'focus';
-  const source = region === 'focus' ? focusRegion(video.videoWidth, video.videoHeight) : {
+  const viewport = video.getBoundingClientRect();
+  const source = region === 'focus' ? focusRegion(video.videoWidth, video.videoHeight, viewport.width, viewport.height) : {
     x: 0,
     y: 0,
     width: video.videoWidth,
@@ -78,9 +79,15 @@ export async function canvasToFile(
   return new File([blob], name, { type: 'image/jpeg', lastModified: Date.now() });
 }
 
-function focusRegion(width: number, height: number) {
-  const regionWidth = Math.round(width * 0.9);
-  const regionHeight = Math.round(height * 0.42);
+export function focusRegion(width: number, height: number, displayWidth = width, displayHeight = height) {
+  // Match the centered object-fit: cover preview on portrait and landscape screens.
+  const scale = displayWidth > 0 && displayHeight > 0
+    ? Math.max(displayWidth / width, displayHeight / height)
+    : 1;
+  const visibleWidth = displayWidth > 0 ? Math.min(width, displayWidth / scale) : width;
+  const visibleHeight = displayHeight > 0 ? Math.min(height, displayHeight / scale) : height;
+  const regionWidth = Math.round(visibleWidth * 0.9);
+  const regionHeight = Math.round(visibleHeight * 0.42);
   return {
     x: Math.round((width - regionWidth) / 2),
     y: Math.round((height - regionHeight) / 2),

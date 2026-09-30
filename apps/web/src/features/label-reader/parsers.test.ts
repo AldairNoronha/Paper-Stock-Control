@@ -3,6 +3,23 @@ import { describe, expect, it } from 'vitest';
 import { parseLabel } from './parsers';
 
 describe('supplier label parsers', () => {
+  it('does not accept a truncated Impress pallet when OCR loses suffix separators', () => {
+    const result = parseLabel({ text: 'IMPRESS\nE-102410/270-15.1.02', ocrConfidence: 0.19, codes: [] });
+    expect(result.fields.supplierPalletCode.value).toBeNull();
+    expect(result.fields.lotCode.value).toBeNull();
+  });
+  it('recognizes a bounded T/I OCR confusion in Schattdecor without perfect confidence', () => {
+    const result = parseLabel({ text: 'SCHATIDECOR\nDesign\nCONVÉS', ocrConfidence: 0.8, codes: [] });
+    expect(result.fields.supplier.value).toBe('SCHATTDECOR');
+    expect(result.fields.supplier.confidence).toBeLessThan(0.9);
+    expect(result.fields.supplierMaterialName.value).toBe('CONVÉS');
+  });
+
+  it('reads bilingual Impress sheet headers without a QR', () => {
+    const result = parseLabel({ text: 'IMPRESS\nQUANTITY SHEETS (QTD FOLHAS)\n845', ocrConfidence: 0.8, codes: [] });
+    expect(result.fields.quantitySheets.value).toBe(845);
+    expect(result.fields.quantitySheets.sources).toEqual(['OCR']);
+  });
   it('keeps the Impress order number separate from lot and exposes its SSCC', () => {
     const result = parseLabel({
       text: 'IMPRESS\nORDER NUMBER 102410/270\n90113 UNICOLOR IP441 2760x1860mm\n(00)378989959000344929',

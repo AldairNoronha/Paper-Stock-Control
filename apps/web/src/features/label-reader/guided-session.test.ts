@@ -27,6 +27,17 @@ function observation(partial: Partial<GuidedObservation>): GuidedObservation {
 }
 
 describe('guided scan accumulator', () => {
+  it('keeps ambiguous Schattdecor lots pending instead of accepting damaged OCR', () => {
+    const accumulator = new GuidedScanAccumulator();
+    for (let index = 0; index < 2; index++) accumulator.observe(observation({ text: 'SCHATTDECOR\nDesign\nCONVÉS' }));
+    for (let index = 0; index < 2; index++) accumulator.observe(observation({ target: 'lot', text: 'Lote: DOO924/388', ocrConfidence: 0.4 }));
+    expect(accumulator.current().fields.lotCode.value).toBeNull();
+    expect(guidedCriticalComplete(accumulator.current())).toBe(false);
+  });
+  it('starts with printed identity, without requiring a QR or barcode', () => {
+    expect(nextGuidedTarget(null)).toBe('identity');
+    expect(nextGuidedTarget(new GuidedScanAccumulator().current())).toBe('identity');
+  });
   it('accepts Impress QR fields but continues looking for its separate barcode', () => {
     const accumulator = new GuidedScanAccumulator();
     const { result } = accumulator.observe(observation({
@@ -41,7 +52,7 @@ describe('guided scan accumulator', () => {
     expect(result.fields.quantitySheets.value).toBe(820);
     expect(result.fields.widthMm.value).toBe(1860);
     expect(result.fields.lengthMm.value).toBe(2760);
-    expect(nextGuidedTarget(result, true, true)).toBe('code');
+    expect(nextGuidedTarget(result)).toBe('code');
     expect(guidedCriticalComplete(result)).toBe(false);
     expect(result.overallConfidence).toBeLessThan(0.9);
     const complete = accumulator.observe(observation({
@@ -49,7 +60,7 @@ describe('guided scan accumulator', () => {
     })).result;
     expect(complete.fields.supplierSscc.value).toBe('378989959000364088');
     expect(guidedCriticalComplete(complete)).toBe(true);
-    expect(nextGuidedTarget(complete, true, true)).toBe('overview');
+    expect(nextGuidedTarget(complete)).toBe('overview');
   });
 
   it('requires the same OCR value twice before accepting a critical field', () => {

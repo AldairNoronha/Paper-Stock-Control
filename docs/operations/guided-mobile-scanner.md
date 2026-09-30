@@ -9,6 +9,7 @@ a etiqueta com a câmera traseira e recebe orientação sobre o próximo campo a
 
 1. O operador inicia a câmera contínua em HTTPS.
 2. QR, Data Matrix e códigos lineares são procurados continuamente.
+   A orientação começa por fornecedor/material; nenhum QR é necessário para iniciar o OCR.
 3. A moldura central é avaliada quanto a luz, contraste e foco.
 4. Um único worker OCR processa quadros sequencialmente, sem gravar vídeo.
 5. Leituras OCR críticas precisam aparecer em dois quadros antes de serem aceitas.
@@ -29,12 +30,19 @@ Executar em Android Chrome usando as etiquetas reais Impress, Schattdecor e Inte
 
 1. Abrir a aplicação publicada e selecionar o modo de teste.
 2. Permitir a câmera e confirmar que a câmera traseira foi escolhida.
-3. Aproximar primeiro do QR/código e confirmar vibração ou sinal visual.
+3. Cobrir o QR e aproximar do fornecedor/material. Confirmar que os textos são coletados
+   e que a indicação de leitura de texto aparece mesmo com zero códigos encontrados.
 4. Mover a moldura para cada campo solicitado, mantendo-a parada por dois ciclos.
 5. Confirmar que o checklist preserva campos já encontrados.
 6. Abrir a revisão e conferir todos os valores contra a etiqueta física.
 7. Repetir com iluminação normal, reflexo moderado e lanterna quando disponível.
 8. Negar a câmera e confirmar que a opção de fotografia continua disponível.
+9. Repetir mostrando QR e barras, verificando que os leitores complementam os textos.
+
+No vídeo, a qualidade considera o recorte da moldura, não o tamanho mínimo de uma fotografia
+inteira. A moldura corresponde à parte efetivamente visível da câmera, inclusive quando
+o navegador recorta um vídeo horizontal para a tela vertical. Poucos pixels, falta de foco,
+baixo contraste e iluminação inutilizável continuam bloqueando o OCR.
 
 Registrar por fornecedor: tempo total, campos automáticos, correções manuais, códigos não
 lidos e qualquer valor incorreto. Um valor incorreto aceito silenciosamente reprova o lote.

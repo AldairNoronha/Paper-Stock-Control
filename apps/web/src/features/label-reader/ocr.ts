@@ -60,13 +60,12 @@ export class OcrSession {
     target: GuidedCaptureTarget
   ): Promise<OcrResult> {
     const [{ PSM }, worker] = await Promise.all([import('tesseract.js'), this.initialize()]);
-    const numericTarget = target === 'quantity' || target === 'dimensions';
     await worker.setParameters({
       preserve_interword_spaces: '1',
-      tessedit_pageseg_mode: numericTarget ? PSM.SINGLE_BLOCK : PSM.SPARSE_TEXT,
-      tessedit_char_whitelist: numericTarget
-        ? '0123456789xX×/.,:()- QUANTITYquantiyFOLHASfolhasPCpcDIMENSOESdimensoesMMmmLARGURAlarguraCOMPRIMENTOcomprimento'
-        : ''
+      // Supplier labels mix Portuguese/English headers and numbers in columns.
+      // A numeric whitelist damages those headers, preventing field association.
+      tessedit_pageseg_mode: target === 'code' ? PSM.SINGLE_LINE : PSM.SPARSE_TEXT,
+      tessedit_char_whitelist: ''
     });
     const result = await worker.recognize(canvas);
     return {

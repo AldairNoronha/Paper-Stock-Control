@@ -184,13 +184,10 @@ export class GuidedScanAccumulator {
 }
 
 export function nextGuidedTarget(
-  result: LabelAnalysisResult | null,
-  hasCode: boolean,
-  initialCodePassDone: boolean
+  result: LabelAnalysisResult | null
 ): GuidedCaptureTarget {
-  if (!hasCode && !initialCodePassDone) return 'code';
   const fields = result?.fields;
-  if (!fields || !fields.supplier.value || !fields.supplierMaterialName.value) return 'identity';
+  if (!fields || !fields.supplier.value || fields.supplier.value === 'UNKNOWN' || !fields.supplierMaterialName.value) return 'identity';
   if (!fields.quantitySheets.value) return 'quantity';
   if (!fields.widthMm.value || !fields.lengthMm.value) return 'dimensions';
   if (!fields.lotCode.value && !fields.supplierPalletCode.value) return 'lot';
@@ -262,10 +259,10 @@ function applyTargetedFallbacks(
     }
   }
   if (target === 'lot' && !next.lotCode.value && !next.supplierPalletCode.value) {
-    const lot = firstMatch(text, [
-      /(?:LOTE|BATCH)\s*(?:BARCODE)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9/.-]{5,30})/i,
-      /\b(D\d{8,12})\b/i,
-      /\b(E-\d{5,}\/\d{2,3}(?:-[A-Z0-9]+)+)\b/i
+    const lot = firstMatch(text, next.supplier.value === 'SCHATTDECOR' ? [
+      /\b(D\d{8,12})\b/i
+    ] : [
+      /(?:LOTE|BATCH)\s*(?:BARCODE)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9/.-]{5,30})/i
     ]);
     if (lot) next.lotCode = reading(lot, confidence, 'OCR');
   }
@@ -274,7 +271,7 @@ function applyTargetedFallbacks(
 
 function detectSupplier(text: string): SupplierCode | null {
   if (/IMPRESS/i.test(text)) return 'IMPRESS';
-  if (/SCHATTDECOR/i.test(text)) return 'SCHATTDECOR';
+  if (/\bSCHAT[TIL1]DECOR\b/i.test(text)) return 'SCHATTDECOR';
   if (/INTERPRINT/i.test(text)) return 'INTERPRINT';
   return null;
 }
