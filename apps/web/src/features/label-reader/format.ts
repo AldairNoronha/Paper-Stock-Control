@@ -8,7 +8,7 @@ export function confidenceLevel(confidence: number): 'high' | 'medium' | 'low' {
 
 export function confidenceLabel(confidence: number): string {
   if (confidence === 0) return 'Não identificado';
-  return `${Math.round(confidence * 100)}%`;
+  return `${Math.min(99, Math.round(confidence * 100))}%`;
 }
 
 export function fieldValue<T>(field: FieldReading<T>): string {

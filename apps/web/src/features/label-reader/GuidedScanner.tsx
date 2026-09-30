@@ -5,6 +5,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 
 import { canvasToFile, captureVideoFrame, prepareOcrFrame } from './camera-frame';
+import { readLinearCode } from './code-reader';
 import {
   GUIDED_TARGETS,
   GuidedScanAccumulator,
@@ -222,6 +223,24 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
       attemptsRef.current += 1;
       if (attemptsRef.current >= 3) initialCodePassRef.current = true;
       const currentTarget = targetRef.current;
+      if (currentTarget === 'code') {
+        // A multi-format video reader may keep returning the QR. Search bars independently.
+        const barcode = await readLinearCode(frame);
+        if (barcode) {
+          const observed = accumulatorRef.current.observe({
+            text: '', ocrConfidence: 0, codes: [barcode], quality,
+            target: 'code', capturedAt: new Date().toISOString()
+          });
+          hasCodeRef.current = true;
+          setHasCode(true);
+          updateFromObservation(observed.result);
+          if (observed.newCode) {
+            await saveEvidence(frame, quality, 'code', observed.acceptedFields);
+            notifyAccepted();
+          }
+          if (guidedCriticalComplete(observed.result)) return;
+        }
+      }
       setOcrProgress(0);
       const recognized = await ocr.recognize(
         prepareOcrFrame(frame),
@@ -265,7 +284,9 @@ export function GuidedScanner({ onReview, onPhotoSelected }: GuidedScannerProps)
       setStatus('ready');
       setMessage('Campos obrigatórios encontrados. Revise os valores antes de confirmar.');
     } else {
-      setMessage(GUIDED_TARGETS[nextTarget].instruction);
+      setMessage(nextTarget === 'code' && nextResult.fields.supplier.value === 'IMPRESS'
+        ? 'O QR já pode estar completo. Aproxime agora das barras e do número impresso após (00).'
+        : GUIDED_TARGETS[nextTarget].instruction);
     }
   }
 

@@ -3,6 +3,7 @@ import { createOcrCanvas, loadImage } from './image';
 import { extractText } from './ocr';
 import { parseLabel } from './parsers';
 import { checkImageQuality } from './quality';
+import { isValidSscc } from './sscc';
 import type {
   AnalysisProgress,
   FieldReading,
@@ -42,6 +43,7 @@ export async function analyzeLabel(
   const overallConfidence = calculateOverallConfidence(parsed.fields, validation.areaConsistent);
   const reviewRequired =
     validation.missingCriticalFields.length > 0 ||
+    validation.areaConsistent === false ||
     criticalReadings(parsed.fields).some((field) => field.confidence < 0.8);
 
   onProgress({ stage: 'complete', progress: 1, message: 'Leitura concluída. Revise os campos antes de aprovar.' });
@@ -67,6 +69,7 @@ export function recalculateAnalysis(
   const overallConfidence = calculateOverallConfidence(fields, validation.areaConsistent);
   const reviewRequired =
     validation.missingCriticalFields.length > 0 ||
+    validation.areaConsistent === false ||
     criticalReadings(fields).some((field) => field.confidence < 0.8);
   return { ...result, fields, validation, overallConfidence, reviewRequired };
 }
@@ -91,6 +94,12 @@ function validateFields(fields: LabelFields) {
   }
   if (!fields.supplierMaterialName.value) missingCriticalFields.push('Material');
   if (!fields.lotCode.value && !fields.supplierPalletCode.value) missingCriticalFields.push('Lote/código');
+  if (fields.supplier.value === 'IMPRESS' && !isValidSscc(fields.supplierSscc.value)) {
+    missingCriticalFields.push('Código de barras (SSCC)');
+  }
+  if (fields.supplierSscc.value && !isValidSscc(fields.supplierSscc.value) && fields.supplier.value !== 'IMPRESS') {
+    missingCriticalFields.push('SSCC válido');
+  }
   if (!fields.quantitySheets.value) missingCriticalFields.push('Quantidade');
   if (!fields.widthMm.value || !fields.lengthMm.value) missingCriticalFields.push('Dimensões');
   return { calculatedAreaM2, areaDifferenceM2, areaConsistent, missingCriticalFields };
@@ -103,14 +112,19 @@ function criticalReadings(fields: LabelFields): FieldReading<unknown>[] {
     fields.lotCode.value ? fields.lotCode : fields.supplierPalletCode,
     fields.quantitySheets,
     fields.widthMm,
-    fields.lengthMm
+    fields.lengthMm,
+    ...(fields.supplier.value === 'IMPRESS' ? [fields.supplierSscc] : [])
   ];
 }
 
 function calculateOverallConfidence(fields: LabelFields, areaConsistent: boolean | null): number {
-  const readings = criticalReadings(fields).filter((field) => field.value !== null);
-  if (readings.length === 0) return 0;
-  const average = readings.reduce((sum, field) => sum + field.confidence, 0) / readings.length;
-  const validated = areaConsistent === true ? Math.min(1, average + 0.03) : average;
-  return Math.round(validated * 100) / 100;
+  const readings = criticalReadings(fields);
+  const average = readings.reduce((sum, field) => {
+    if (field.value === null || field.value === '' || field.value === 'UNKNOWN') return sum;
+    if (field === fields.supplierSscc && !isValidSscc(fields.supplierSscc.value)) return sum;
+    return sum + field.confidence;
+  }, 0) / readings.length;
+  // Estimated confidence is not a guarantee of correctness. Area validation never adds a bonus.
+  const validated = areaConsistent === false ? Math.min(average, 0.79) : average;
+  return Math.min(0.99, Math.round(validated * 100) / 100);
 }

@@ -27,7 +27,7 @@ function observation(partial: Partial<GuidedObservation>): GuidedObservation {
 }
 
 describe('guided scan accumulator', () => {
-  it('accepts a QR payload immediately and skips fields already supplied by it', () => {
+  it('accepts Impress QR fields but continues looking for its separate barcode', () => {
     const accumulator = new GuidedScanAccumulator();
     const { result } = accumulator.observe(observation({
       target: 'code',
@@ -41,7 +41,15 @@ describe('guided scan accumulator', () => {
     expect(result.fields.quantitySheets.value).toBe(820);
     expect(result.fields.widthMm.value).toBe(1860);
     expect(result.fields.lengthMm.value).toBe(2760);
-    expect(nextGuidedTarget(result, true, true)).toBe('overview');
+    expect(nextGuidedTarget(result, true, true)).toBe('code');
+    expect(guidedCriticalComplete(result)).toBe(false);
+    expect(result.overallConfidence).toBeLessThan(0.9);
+    const complete = accumulator.observe(observation({
+      target: 'code', codes: [{ format: 'CODE_128', value: '00378989959000364088' }]
+    })).result;
+    expect(complete.fields.supplierSscc.value).toBe('378989959000364088');
+    expect(guidedCriticalComplete(complete)).toBe(true);
+    expect(nextGuidedTarget(complete, true, true)).toBe('overview');
   });
 
   it('requires the same OCR value twice before accepting a critical field', () => {

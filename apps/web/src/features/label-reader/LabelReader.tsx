@@ -15,6 +15,7 @@ import {
   formatDuration
 } from './format';
 import { GuidedScanner } from './GuidedScanner';
+import { isValidSscc, parseSscc } from './sscc';
 import type {
   AnalysisProgress,
   CaptureEvidence,
@@ -95,16 +96,7 @@ export function LabelReader({ persistence }: LabelReaderProps = {}) {
 
   const criticalComplete = useMemo(() => {
     if (!result) return false;
-    const { fields } = result;
-    return Boolean(
-      fields.supplier.value &&
-        fields.supplier.value !== 'UNKNOWN' &&
-        fields.supplierMaterialName.value &&
-        (fields.lotCode.value || fields.supplierPalletCode.value) &&
-        fields.quantitySheets.value &&
-        fields.widthMm.value &&
-        fields.lengthMm.value
-    );
+    return result.validation.missingCriticalFields.length === 0;
   }, [result]);
 
   function selectFile(selected: File) {
@@ -181,7 +173,9 @@ export function LabelReader({ persistence }: LabelReaderProps = {}) {
       ? value === '' || !Number.isFinite(parsedNumber)
         ? null
         : parsedNumber
-      : value.trim() || null;
+      : key === 'supplierSscc'
+        ? parseSscc(value) ?? (value.trim() || null)
+        : value.trim() || null;
     const fields = {
       ...result.fields,
       [key]: {
@@ -386,7 +380,12 @@ function ReviewPanel({
   onLocationChange,
   onReset
 }: ReviewPanelProps) {
-  const overallLevel = confidenceLevel(result.overallConfidence);
+  const overallLevel = result.validation.missingCriticalFields.length > 0 || result.validation.areaConsistent === false
+    ? 'low'
+    : confidenceLevel(result.overallConfidence);
+  const qrCount = result.detectedCodes.filter((code) => code.format === 'QR_CODE').length;
+  const barcodeCount = result.detectedCodes.filter((code) => code.format !== 'QR_CODE' && code.format !== 'DATA_MATRIX').length;
+  const matrixCount = result.detectedCodes.filter((code) => code.format === 'DATA_MATRIX').length;
   const detectedSupplier = catalog?.suppliers.find(
     (supplier) => supplier.code === result.fields.supplier.value
   );
@@ -402,19 +401,30 @@ function ReviewPanel({
         <div>
           <p className="eyebrow">ETIQUETA ANALISADA</p>
           <h3>{result.fields.supplier.value ?? 'Fornecedor não identificado'}</h3>
-          <p>{result.reviewRequired ? 'Revise os campos destacados.' : 'Leitura consistente. Confirme os dados.'}</p>
+          <p>{result.validation.missingCriticalFields.length > 0
+            ? 'Leitura parcial. Complete os campos destacados.'
+            : result.reviewRequired ? 'Revise os campos destacados.' : 'Dados obrigatórios encontrados. Confira a etiqueta.'}</p>
         </div>
         <div className={`confidence-ring ${overallLevel}`}>
           <strong>{Math.round(result.overallConfidence * 100)}%</strong>
-          <span>confiança</span>
+          <span>estimativa</span>
         </div>
       </div>
 
       <div className="quality-strip">
         <span>{result.quality.width} × {result.quality.height}px</span>
-        <span>{result.detectedCodes.length ? `${result.detectedCodes.length} código lido` : 'Somente OCR'}</span>
+        <span>QR: {qrCount} · Barras: {barcodeCount}{matrixCount > 0 ? ` · Data Matrix: ${matrixCount}` : ''}</span>
         <span>{formatDuration(result.elapsedMs)}</span>
       </div>
+
+      {result.fields.supplier.value === 'IMPRESS' && !isValidSscc(result.fields.supplierSscc.value) && (
+        <div className="message-panel warning" role="alert">
+          <strong>{result.fields.supplierSscc.value
+            ? 'SSCC inválido. Confira o número e seu dígito verificador.'
+            : 'O código de barras (SSCC) ainda não foi identificado.'}</strong>
+          <span>Aproxime a câmera das barras ou digite o número de 18 dígitos impresso após (00). O QR e o código do pallet são identificadores separados.</span>
+        </div>
+      )}
 
       {result.quality.issues.length > 0 && (
         <div className="message-panel warning">
@@ -434,7 +444,7 @@ function ReviewPanel({
           onChange={(value) => onFieldChange('supplierMaterialName', value)}
         />
         <TextField
-          label="Lote"
+          label="Lote (quando informado)"
           field={result.fields.lotCode}
           onChange={(value) => onFieldChange('lotCode', value)}
         />
@@ -442,6 +452,11 @@ function ReviewPanel({
           label="Código do pallet"
           field={result.fields.supplierPalletCode}
           onChange={(value) => onFieldChange('supplierPalletCode', value)}
+        />
+        <TextField
+          label={result.fields.supplier.value === 'IMPRESS' ? 'Código de barras (SSCC) *' : 'Código de barras (SSCC)'}
+          field={result.fields.supplierSscc}
+          onChange={(value) => onFieldChange('supplierSscc', value)}
         />
         <NumberField
           label="Quantidade de folhas *"
@@ -579,7 +594,7 @@ function FieldFrame<T>({ label, field, children }: FieldProps<T> & { children: R
     <label className={`review-field ${level}`}>
       <span className="field-label">
         {label}
-        <small>{confidenceLabel(field.confidence)}</small>
+        <small>{field.sources.includes('MANUAL') ? 'Conferido manualmente' : confidenceLabel(field.confidence)}</small>
       </span>
       {children}
       <span className="field-source">{field.sources.join(' + ') || 'Revisão necessária'}</span>

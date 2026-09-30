@@ -11,6 +11,7 @@ export interface LabelFields {
   supplier: FieldReading<SupplierCode>;
   supplierMaterialName: FieldReading<string>;
   supplierPalletCode: FieldReading<string>;
+  supplierSscc: FieldReading<string>;
   lotCode: FieldReading<string>;
   quantitySheets: FieldReading<number>;
   widthMm: FieldReading<number>;

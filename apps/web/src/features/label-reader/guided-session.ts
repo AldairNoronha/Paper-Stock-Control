@@ -1,5 +1,6 @@
 import { recalculateAnalysis } from './analyzer';
 import { parseLabel } from './parsers';
+import { isValidSscc } from './sscc';
 import type {
   DetectedCode,
   FieldReading,
@@ -193,6 +194,7 @@ export function nextGuidedTarget(
   if (!fields.quantitySheets.value) return 'quantity';
   if (!fields.widthMm.value || !fields.lengthMm.value) return 'dimensions';
   if (!fields.lotCode.value && !fields.supplierPalletCode.value) return 'lot';
+  if (fields.supplier.value === 'IMPRESS' && !isValidSscc(fields.supplierSscc.value)) return 'code';
   return 'overview';
 }
 
@@ -209,7 +211,11 @@ export function guidedChecklist(result: LabelAnalysisResult | null): GuidedCheck
     { key: 'material', label: 'Material', complete: Boolean(fields?.supplierMaterialName.value), value: value(fields?.supplierMaterialName), required: true },
     { key: 'quantity', label: 'Folhas', complete: Boolean(fields?.quantitySheets.value), value: value(fields?.quantitySheets), required: true },
     { key: 'dimensions', label: 'Dimensões', complete: Boolean(dimensions), value: dimensions, required: true },
-    { key: 'lot', label: 'Lote / pallet', complete: Boolean(lot), value: lot ? String(lot) : null, required: true }
+    { key: 'lot', label: 'Lote / pallet', complete: Boolean(lot), value: lot ? String(lot) : null, required: true },
+    ...(fields?.supplier.value === 'IMPRESS' ? [{
+      key: 'sscc', label: 'Código de barras (SSCC)', complete: isValidSscc(fields.supplierSscc.value),
+      value: value(fields.supplierSscc), required: true
+    }] : [])
   ];
 }
 

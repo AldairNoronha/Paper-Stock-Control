@@ -1,3 +1,4 @@
+import { ssccFromCodes, ssccFromText } from './sscc';
 import type {
   DetectedCode,
   FieldReading,
@@ -31,6 +32,7 @@ export function emptyFields(): LabelFields {
     supplier: empty<SupplierCode>(),
     supplierMaterialName: empty<string>(),
     supplierPalletCode: empty<string>(),
+    supplierSscc: empty<string>(),
     lotCode: empty<string>(),
     quantitySheets: empty<number>(),
     widthMm: empty<number>(),
@@ -44,7 +46,7 @@ export function emptyFields(): LabelFields {
 
 const impressParser: LabelParser = {
   name: 'ImpressLabelParser',
-  version: '1.0.0',
+  version: '1.1.0',
   matches: ({ text, codes }) =>
     /IMPRESS/i.test(text) ||
     /E-\d{5,}/i.test(text) ||
@@ -163,14 +165,16 @@ export function parseLabel(input: ParserInput): {
   fields: LabelFields;
 } {
   const parser = parsers.find((candidate) => candidate.matches(input));
-  if (!parser) {
-    return {
-      parserName: 'UnknownLabelParser',
-      parserVersion: '1.0.0',
-      fields: parseUnknown(input)
-    };
-  }
-  return { parserName: parser.name, parserVersion: parser.version, fields: parser.parse(input) };
+  const fields = parser ? parser.parse(input) : parseUnknown(input);
+  const barcodeSscc = ssccFromCodes(input.codes);
+  fields.supplierSscc = barcodeSscc
+    ? reading(barcodeSscc, 0.99, 'BARCODE')
+    : reading(ssccFromText(input.text), ocrFieldConfidence(input.ocrConfidence), 'OCR');
+  return {
+    parserName: parser?.name ?? 'UnknownLabelParser',
+    parserVersion: parser?.version ?? '1.0.0',
+    fields
+  };
 }
 
 function parseImpressOcr(input: ParserInput): LabelFields {
@@ -187,6 +191,11 @@ function parseImpressOcr(input: ParserInput): LabelFields {
     ),
     supplierPalletCode: reading(
       firstMatch(text, [/\b(E-\d{5,}\/\d{2,3}(?:-[A-Z0-9]+)+)\b/i]),
+      confidence,
+      'OCR'
+    ),
+    lotCode: reading(
+      firstMatch(text, [/(?:LOTE|BATCH)\s*[:#-]?\s*([A-Z0-9][A-Z0-9/.-]{3,40})/i]),
       confidence,
       'OCR'
     ),

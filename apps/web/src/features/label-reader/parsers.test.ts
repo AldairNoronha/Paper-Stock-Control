@@ -3,6 +3,16 @@ import { describe, expect, it } from 'vitest';
 import { parseLabel } from './parsers';
 
 describe('supplier label parsers', () => {
+  it('keeps the Impress order number separate from lot and exposes its SSCC', () => {
+    const result = parseLabel({
+      text: 'IMPRESS\nORDER NUMBER 102410/270\n90113 UNICOLOR IP441 2760x1860mm\n(00)378989959000344929',
+      ocrConfidence: 0.8,
+      codes: [{ format: 'CODE_128', value: '00378989959000344929' }]
+    });
+    expect(result.fields.supplierSscc.value).toBe('378989959000344929');
+    expect(result.fields.supplierSscc.sources).toEqual(['BARCODE']);
+    expect(result.fields.lotCode.value).toBeNull();
+  });
   it('parses the real Impress QR payload without inventing the unknown field', () => {
     const result = parseLabel({
       text: '',

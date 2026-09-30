@@ -1,4 +1,5 @@
 import type { RuntimeConfig } from '../../lib/runtime';
+import { parseSscc } from './sscc';
 import type { CaptureEvidence, LabelAnalysisResult } from './types';
 
 export interface SupplierDto { id: string; code: string; name: string }
@@ -113,7 +114,7 @@ export async function persistReceipt(
       location_id: locationId,
       supplier_material_name: fields.supplierMaterialName.value,
       supplier_pallet_code: fields.supplierPalletCode.value,
-      supplier_sscc: findSscc(result),
+      supplier_sscc: fields.supplierSscc.value ? parseSscc(fields.supplierSscc.value) : null,
       lot_code: fields.lotCode.value,
       quantity_sheets: fields.quantitySheets.value,
       width_mm: fields.widthMm.value,
@@ -132,13 +133,4 @@ export async function persistReceipt(
     })
   });
   return { receipt, scanId };
-}
-
-function findSscc(result: LabelAnalysisResult): string | null {
-  for (const code of result.detectedCodes) {
-    const digits = code.value.replace(/\D/g, '');
-    if (digits.length === 18) return digits;
-    if (digits.length === 20 && digits.startsWith('00')) return digits.slice(2);
-  }
-  return null;
 }
