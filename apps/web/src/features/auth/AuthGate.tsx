@@ -22,7 +22,7 @@ export function AuthGate({ config, children, pilot }: AuthGateProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [pilotMode, setPilotMode] = useState(false);
+  const [pilotMode, setPilotMode] = useState(true);
 
   useEffect(() => {
     void client.auth.getSession().then(({ data }) => {
