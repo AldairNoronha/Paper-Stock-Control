@@ -17,6 +17,12 @@ services:
         value: https://aldairnoronha.github.io
       - key: SUPABASE_STORAGE_BUCKET
         value: label-images
+      - key: LABEL_OCR_ENABLED
+        value: "false"
+      - key: GOOGLE_VISION_API_KEY
+        sync: false
+      - key: LABEL_OCR_DAILY_LIMIT
+        value: "100"
       - key: DATABASE_URL
         sync: false
       - key: SUPABASE_URL

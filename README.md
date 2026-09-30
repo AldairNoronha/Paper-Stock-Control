@@ -8,9 +8,19 @@ testes concorrentes. A Fase 3A entrega um piloto móvel de leitura local de etiq
 A Fase 3B adiciona login, armazenamento privado da foto, persistência das evidências e
 confirmação transacional da entrada quando uma API pública estiver configurada.
 
-## Piloto móvel de leitura (Fase 3A)
+## Leitura V2 — em validação
 
-Abra <https://aldairnoronha.github.io/Paper-Stock-Control/> no celular. O piloto:
+O fluxo padrão agora usa **foto completa → OCR no servidor → revisão pela imagem**.
+Não depende do QR e não movimenta estoque. É necessário configurar o Google Cloud
+Vision no backend e entrar com usuário autorizado para fazer a análise automática.
+Sem o serviço, o aplicativo informa a indisponibilidade e permite revisão manual.
+Veja [ativação e critérios de teste da V2](docs/LEITOR_V2.md). A acurácia no celular
+ainda precisa de validação com fotos físicas e o serviço real.
+
+## Leitor anterior / piloto móvel (Fase 3A)
+
+Abra <https://aldairnoronha.github.io/Paper-Stock-Control/> no celular e selecione
+“Leitor anterior” para acessar o piloto original. Ele:
 
 - abre a câmera traseira ou uma foto já existente;
 - rejeita imagens muito pequenas, escuras, estouradas ou desfocadas;

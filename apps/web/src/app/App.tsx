@@ -1,5 +1,5 @@
 import { AuthGate } from '../features/auth/AuthGate';
-import { LabelReader } from '../features/label-reader/LabelReader';
+import { ReaderWorkspace } from '../features/photo-reader/ReaderWorkspace';
 import { getRuntimeConfig } from '../lib/runtime';
 import { AppUpdate } from './AppUpdate';
 
@@ -14,36 +14,36 @@ export function App() {
         </p>
         <h1 id="page-title">Paper Stock Control</h1>
         <p className="subtitle">
-          Passe a câmera pelas áreas de uma etiqueta Impress, Schattdecor ou Interprint.
-          O aplicativo coleta cada campo e avisa o que ainda falta.
+          Fotografe a etiqueta completa de Impress, Schattdecor ou Interprint.
+          Na V2, o servidor extrai o texto e você confere cada campo na imagem.
         </p>
         <div className="status" role="status">
           <span aria-hidden="true" />
-          {config ? 'Modo operacional conectado' : 'O vídeo não é gravado; somente evidências aprovadas'}
+          V2 em validação · análise não movimenta estoque
         </div>
       </section>
 
       {config ? (
-        <AuthGate config={config} pilot={<LabelReader />}>
+        <AuthGate config={config} pilot={<ReaderWorkspace config={config} />}>
           {(accessToken, signOut) => (
             <>
               <div className="session-bar">
-                <span>Sessão autenticada · fotos serão guardadas no Storage privado</span>
+                <span>Sessão autenticada · V2 analisa sem guardar no estoque</span>
                 <button type="button" onClick={() => void signOut()}>Sair</button>
               </div>
-              <LabelReader persistence={{ config, accessToken }} />
+              <ReaderWorkspace persistence={{ config, accessToken }} />
             </>
           )}
         </AuthGate>
       ) : (
-        <LabelReader />
+        <ReaderWorkspace />
       )}
 
       <footer>
         {config ? (
-          <><strong>Modo real:</strong> confirme somente depois de revisar material, lote, quantidade e destino.</>
+          <><strong>V2 em teste:</strong> revise os dados. Analisar ou exportar uma revisão não cria pallet nem movimenta estoque. O leitor anterior mantém o fluxo operacional.</>
         ) : (
-          <><strong>Teste seguro:</strong> aprovar a leitura não cria pallet nem altera o estoque.</>
+          <><strong>Teste seguro:</strong> a revisão V2 não cria pallet nem altera o estoque.</>
         )}
       </footer>
     </main>

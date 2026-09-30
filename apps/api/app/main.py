@@ -20,6 +20,7 @@ from app.modules.labels.application.errors import (
     LabelScanValidationError,
     LabelStorageError,
 )
+from app.modules.labels.presentation.photo_routes import router as photo_router
 from app.modules.labels.presentation.routes import router as labels_router
 from app.presentation.health import router as health_router
 
@@ -48,6 +49,7 @@ app.include_router(health_router, prefix=settings.api_v1_prefix)
 app.include_router(catalog_router, prefix=settings.api_v1_prefix)
 app.include_router(inventory_router, prefix=settings.api_v1_prefix)
 app.include_router(labels_router, prefix=settings.api_v1_prefix)
+app.include_router(photo_router, prefix=settings.api_v1_prefix)
 
 
 @app.exception_handler(InventoryNotFoundError)
