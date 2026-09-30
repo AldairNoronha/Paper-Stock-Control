@@ -15,6 +15,12 @@ from app.modules.inventory.application.errors import (
     InventoryNotFoundError,
 )
 from app.modules.inventory.presentation.routes import router as inventory_router
+from app.modules.labels.application.errors import (
+    LabelScanConflictError,
+    LabelScanValidationError,
+    LabelStorageError,
+)
+from app.modules.labels.presentation.routes import router as labels_router
 from app.presentation.health import router as health_router
 
 settings = get_settings()
@@ -41,6 +47,7 @@ app.add_middleware(
 app.include_router(health_router, prefix=settings.api_v1_prefix)
 app.include_router(catalog_router, prefix=settings.api_v1_prefix)
 app.include_router(inventory_router, prefix=settings.api_v1_prefix)
+app.include_router(labels_router, prefix=settings.api_v1_prefix)
 
 
 @app.exception_handler(InventoryNotFoundError)
@@ -78,6 +85,34 @@ async def inventory_integrity_conflict(_: Request, __: IntegrityError) -> JSONRe
     return JSONResponse(
         status_code=status.HTTP_409_CONFLICT,
         content={"detail": "inventory command conflicts with current data"},
+    )
+
+
+@app.exception_handler(LabelScanValidationError)
+async def invalid_label_scan(
+    _: Request, exception: LabelScanValidationError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        content={"detail": str(exception)},
+    )
+
+
+@app.exception_handler(LabelScanConflictError)
+async def duplicate_label_scan(
+    _: Request, exception: LabelScanConflictError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
+        content={"detail": str(exception)},
+    )
+
+
+@app.exception_handler(LabelStorageError)
+async def unavailable_label_storage(_: Request, exception: LabelStorageError) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": str(exception)},
     )
 
 

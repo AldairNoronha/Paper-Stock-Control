@@ -1,0 +1,1 @@
+"""Label scan infrastructure adapters."""

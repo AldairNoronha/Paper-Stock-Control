@@ -1,6 +1,9 @@
+import { AuthGate } from '../features/auth/AuthGate';
 import { LabelReader } from '../features/label-reader/LabelReader';
+import { getRuntimeConfig } from '../lib/runtime';
 
 export function App() {
+  const config = getRuntimeConfig();
   return (
     <main className="app-shell">
       <section className="hero" aria-labelledby="page-title">
@@ -12,14 +15,32 @@ export function App() {
         </p>
         <div className="status" role="status">
           <span aria-hidden="true" />
-          A foto não sai do aparelho neste teste
+          {config ? 'Modo operacional conectado' : 'A foto não sai do aparelho neste teste'}
         </div>
       </section>
 
-      <LabelReader />
+      {config ? (
+        <AuthGate config={config}>
+          {(accessToken, signOut) => (
+            <>
+              <div className="session-bar">
+                <span>Sessão autenticada · fotos serão guardadas no Storage privado</span>
+                <button type="button" onClick={() => void signOut()}>Sair</button>
+              </div>
+              <LabelReader persistence={{ config, accessToken }} />
+            </>
+          )}
+        </AuthGate>
+      ) : (
+        <LabelReader />
+      )}
 
       <footer>
-        <strong>Teste seguro:</strong> aprovar a leitura não cria pallet nem altera o estoque.
+        {config ? (
+          <><strong>Modo real:</strong> confirme somente depois de revisar material, lote, quantidade e destino.</>
+        ) : (
+          <><strong>Teste seguro:</strong> aprovar a leitura não cria pallet nem altera o estoque.</>
+        )}
       </footer>
     </main>
   );

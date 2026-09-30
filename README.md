@@ -5,6 +5,8 @@ Sistema independente para controle e rastreabilidade de papel melamínico por pa
 As Fases 1 e 2 estão implementadas: fundação React/FastAPI/Supabase e núcleo
 transacional de estoque com autenticação, RBAC, idempotência, rotação, auditoria e
 testes concorrentes. A Fase 3A entrega um piloto móvel de leitura local de etiquetas.
+A Fase 3B adiciona login, armazenamento privado da foto, persistência das evidências e
+confirmação transacional da entrada quando uma API pública estiver configurada.
 
 ## Piloto móvel de leitura (Fase 3A)
 
@@ -20,6 +22,12 @@ Abra <https://aldairnoronha.github.io/Paper-Stock-Control/> no celular. O piloto
 
 Neste piloto a foto não é enviada ao servidor, a aprovação não cria pallet e não altera
 estoque. A persistência será conectada quando a API FastAPI estiver hospedada em HTTPS.
+
+No modo operacional, definido pelas três variáveis `VITE_*`, o operador entra com
+Supabase Auth, escolhe material interno e localização e confirma a entrada real. Consulte
+[a operação da Fase 3B](docs/operations/phase-3b.md).
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/AldairNoronha/Paper-Stock-Control)
 
 ## Arquitetura
 

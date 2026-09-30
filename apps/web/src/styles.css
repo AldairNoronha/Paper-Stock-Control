@@ -26,7 +26,7 @@ button, label[for] { -webkit-tap-highlight-color: transparent; }
   padding: clamp(1.25rem, 5vw, 4rem) 0 3rem;
 }
 
-.hero, .reader-card {
+.hero, .reader-card, .auth-card {
   border: 1px solid rgba(22, 51, 44, 0.12);
   border-radius: 1.5rem;
   background: rgba(255, 255, 255, 0.92);
@@ -101,6 +101,29 @@ h1 {
 }
 
 .reader-card { margin-top: 1rem; padding: clamp(1rem, 4vw, 2rem); }
+.auth-card {
+  display: grid;
+  max-width: 34rem;
+  gap: 1rem;
+  margin: 1rem auto 0;
+  padding: clamp(1.25rem, 4vw, 2rem);
+}
+.auth-card h2 { margin-bottom: 0; }
+.auth-card label { display: grid; gap: 0.4rem; font-weight: 750; }
+.auth-card input { min-height: 2.9rem; padding: 0.7rem; border: 1px solid #b8c9c1; border-radius: 0.7rem; }
+.session-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.9rem;
+  background: #173f35;
+  color: white;
+  font-size: 0.85rem;
+}
+.session-bar button { border: 0; background: transparent; color: white; text-decoration: underline; cursor: pointer; }
 .reader-heading {
   display: flex;
   align-items: flex-start;
@@ -197,6 +220,7 @@ h1 {
 .message-panel .secondary-button { justify-self: start; margin-top: 0.4rem; }
 
 .review-panel { overflow: hidden; }
+.receiving-fields { padding: 1.2rem; border-top: 1px solid #d7e1dc; background: #f8fbf9; }
 .review-summary {
   display: flex;
   align-items: center;

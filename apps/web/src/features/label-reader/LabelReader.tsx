@@ -1,7 +1,13 @@
 import { useEffect, useId, useMemo, useState } from 'react';
 import type { ChangeEvent } from 'react';
 
+import type { RuntimeConfig } from '../../lib/runtime';
 import { analyzeLabel, ImageQualityError, recalculateAnalysis } from './analyzer';
+import {
+  loadReceivingCatalog,
+  persistReceipt
+} from './api';
+import type { ReceiptResult, ReceivingCatalog } from './api';
 import {
   confidenceLabel,
   confidenceLevel,
@@ -24,7 +30,11 @@ const initialProgress: AnalysisProgress = {
   message: 'Preparando análise…'
 };
 
-export function LabelReader() {
+interface LabelReaderProps {
+  persistence?: { config: RuntimeConfig; accessToken: string };
+}
+
+export function LabelReader({ persistence }: LabelReaderProps = {}) {
   const inputId = useId();
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -34,6 +44,43 @@ export function LabelReader() {
   const [error, setError] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [approved, setApproved] = useState(false);
+  const [catalog, setCatalog] = useState<ReceivingCatalog | null>(null);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [selectedMaterialId, setSelectedMaterialId] = useState('');
+  const [selectedLocationId, setSelectedLocationId] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [scanId, setScanId] = useState<string | undefined>();
+  const [receipt, setReceipt] = useState<ReceiptResult | null>(null);
+  const [receiptKey, setReceiptKey] = useState(() => crypto.randomUUID());
+
+  useEffect(() => {
+    if (!persistence) return;
+    setCatalogError(null);
+    void loadReceivingCatalog(persistence.config, persistence.accessToken)
+      .then((loaded) => {
+        setCatalog(loaded);
+        if (loaded.locations.length === 1) setSelectedLocationId(loaded.locations[0].id);
+      })
+      .catch((caught: unknown) => {
+        setCatalogError(caught instanceof Error ? caught.message : 'Não foi possível carregar o catálogo.');
+      });
+  }, [persistence]);
+
+  useEffect(() => {
+    if (!catalog || !result) return;
+    const supplier = catalog.suppliers.find((item) => item.code === result.fields.supplier.value);
+    if (!supplier) return;
+    const mappedMaterialIds = new Set(
+      catalog.mappings.filter((item) => item.supplier_id === supplier.id).map((item) => item.material_id)
+    );
+    const compatible = catalog.materials.filter(
+      (item) =>
+        mappedMaterialIds.has(item.id) &&
+        item.width_mm === result.fields.widthMm.value &&
+        item.length_mm === result.fields.lengthMm.value
+    );
+    if (compatible.length === 1) setSelectedMaterialId(compatible[0].id);
+  }, [catalog, result]);
 
   useEffect(() => {
     if (!file) {
@@ -67,8 +114,8 @@ export function LabelReader() {
       setError('Selecione uma fotografia em formato de imagem.');
       return;
     }
-    if (selected.size > 18 * 1024 * 1024) {
-      setError('A fotografia ultrapassa 18 MB. Reduza a resolução e tente novamente.');
+    if (selected.size > 10 * 1024 * 1024) {
+      setError('A fotografia ultrapassa 10 MB. Reduza a resolução e tente novamente.');
       return;
     }
     setFile(selected);
@@ -76,6 +123,9 @@ export function LabelReader() {
     setQualityFailure(null);
     setError(null);
     setApproved(false);
+    setReceipt(null);
+    setScanId(undefined);
+    setReceiptKey(crypto.randomUUID());
     setProgress(initialProgress);
   }
 
@@ -129,8 +179,39 @@ export function LabelReader() {
     setApproved(false);
   }
 
-  function approveReading() {
-    if (!result || !criticalComplete) return;
+  async function approveReading() {
+    if (!result || !file || !criticalComplete) return;
+    if (persistence) {
+      if (!catalog || !selectedMaterialId || !selectedLocationId) return;
+      const supplier = catalog.suppliers.find((item) => item.code === result.fields.supplier.value);
+      if (!supplier) {
+        setError('O fornecedor identificado não existe no catálogo ativo.');
+        return;
+      }
+      setIsSaving(true);
+      setError(null);
+      try {
+        const saved = await persistReceipt(
+          persistence.config,
+          persistence.accessToken,
+          file,
+          result,
+          supplier.id,
+          selectedMaterialId,
+          selectedLocationId,
+          receiptKey,
+          scanId,
+          setScanId
+        );
+        setReceipt(saved.receipt);
+        setApproved(true);
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : 'Não foi possível confirmar a entrada.');
+      } finally {
+        setIsSaving(false);
+      }
+      return;
+    }
     const draft = {
       approvedAt: new Date().toISOString(),
       parserName: result.parserName,
@@ -148,6 +229,9 @@ export function LabelReader() {
     setQualityFailure(null);
     setError(null);
     setApproved(false);
+    setReceipt(null);
+    setScanId(undefined);
+    setReceiptKey(crypto.randomUUID());
     setProgress(initialProgress);
   }
 
@@ -192,8 +276,17 @@ export function LabelReader() {
               result={result}
               criticalComplete={criticalComplete}
               approved={approved}
+              persistenceEnabled={Boolean(persistence)}
+              catalog={catalog}
+              catalogError={catalogError}
+              selectedMaterialId={selectedMaterialId}
+              selectedLocationId={selectedLocationId}
+              isSaving={isSaving}
+              receipt={receipt}
               onFieldChange={updateField}
-              onApprove={approveReading}
+              onApprove={() => void approveReading()}
+              onMaterialChange={setSelectedMaterialId}
+              onLocationChange={setSelectedLocationId}
               onReset={reset}
             />
           )}
@@ -257,8 +350,17 @@ interface ReviewPanelProps {
   result: LabelAnalysisResult;
   criticalComplete: boolean;
   approved: boolean;
+  persistenceEnabled: boolean;
+  catalog: ReceivingCatalog | null;
+  catalogError: string | null;
+  selectedMaterialId: string;
+  selectedLocationId: string;
+  isSaving: boolean;
+  receipt: ReceiptResult | null;
   onFieldChange: <K extends keyof LabelFields>(key: K, value: string) => void;
   onApprove: () => void;
+  onMaterialChange: (value: string) => void;
+  onLocationChange: (value: string) => void;
   onReset: () => void;
 }
 
@@ -266,11 +368,29 @@ function ReviewPanel({
   result,
   criticalComplete,
   approved,
+  persistenceEnabled,
+  catalog,
+  catalogError,
+  selectedMaterialId,
+  selectedLocationId,
+  isSaving,
+  receipt,
   onFieldChange,
   onApprove,
+  onMaterialChange,
+  onLocationChange,
   onReset
 }: ReviewPanelProps) {
   const overallLevel = confidenceLevel(result.overallConfidence);
+  const detectedSupplier = catalog?.suppliers.find(
+    (supplier) => supplier.code === result.fields.supplier.value
+  );
+  const allowedMaterialIds = new Set(
+    catalog?.mappings
+      .filter((mapping) => mapping.supplier_id === detectedSupplier?.id)
+      .map((mapping) => mapping.material_id) ?? []
+  );
+  const materialOptions = catalog?.materials.filter((material) => allowedMaterialIds.has(material.id)) ?? [];
   return (
     <div className="review-panel">
       <div className="review-summary">
@@ -368,6 +488,38 @@ function ReviewPanel({
         </p>
       </div>
 
+      {persistenceEnabled && (
+        <div className="receiving-fields">
+          <p className="eyebrow">DESTINO DA ENTRADA</p>
+          {catalogError && <div className="message-panel danger">{catalogError}</div>}
+          {!catalog && !catalogError && <span>Carregando materiais e localizações…</span>}
+          {catalog && (
+            <div className="field-grid">
+              <label className="review-field">
+                <span className="field-label">Material interno *</span>
+                <select value={selectedMaterialId} onChange={(event) => onMaterialChange(event.target.value)}>
+                  <option value="">Selecione</option>
+                  {materialOptions.map((material) => (
+                    <option key={material.id} value={material.id}>
+                      {material.internal_code} · {material.name} · {material.width_mm}×{material.length_mm}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="review-field">
+                <span className="field-label">Localização *</span>
+                <select value={selectedLocationId} onChange={(event) => onLocationChange(event.target.value)}>
+                  <option value="">Selecione</option>
+                  {catalog.locations.map((location) => (
+                    <option key={location.id} value={location.id}>{location.code} · {location.name}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
+        </div>
+      )}
+
       {!criticalComplete && (
         <div className="message-panel warning" role="alert">
           <strong>Preencha os campos obrigatórios antes de aprovar.</strong>
@@ -379,15 +531,24 @@ function ReviewPanel({
 
       {approved && (
         <div className="message-panel success" role="status">
-          <strong>Leitura aprovada para o teste.</strong>
-          <span>Nenhum estoque foi criado. O rascunho ficou salvo somente neste aparelho.</span>
+          <strong>{receipt ? `Pallet ${receipt.internal_code} recebido.` : 'Leitura aprovada para o teste.'}</strong>
+          <span>{receipt ? `QR interno: ${receipt.internal_qr}` : 'Nenhum estoque foi criado. O rascunho ficou salvo somente neste aparelho.'}</span>
         </div>
       )}
 
       <div className="review-actions">
         <button className="secondary-button" type="button" onClick={onReset}>Nova foto</button>
-        <button className="primary-button" type="button" disabled={!criticalComplete} onClick={onApprove}>
-          Aprovar leitura
+        <button
+          className="primary-button"
+          type="button"
+          disabled={
+            !criticalComplete ||
+            isSaving ||
+            (persistenceEnabled && (!catalog || !selectedMaterialId || !selectedLocationId))
+          }
+          onClick={onApprove}
+        >
+          {isSaving ? 'Confirmando…' : persistenceEnabled ? 'Confirmar entrada' : 'Aprovar leitura'}
         </button>
       </div>
 

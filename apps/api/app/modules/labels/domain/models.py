@@ -2,7 +2,7 @@ from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID
 
-from sqlalchemy import Enum, ForeignKey, Numeric, String, Text
+from sqlalchemy import Enum, ForeignKey, Index, Numeric, String, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -24,6 +24,14 @@ class LabelScanStatus(StrEnum):
 
 class LabelScan(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "label_scans"
+    __table_args__ = (
+        Index(
+            "uq_label_scans_image_sha256",
+            "image_sha256",
+            unique=True,
+            postgresql_where=text("image_sha256 IS NOT NULL"),
+        ),
+    )
 
     image_path: Mapped[str] = mapped_column(String(512), unique=True, nullable=False)
     image_sha256: Mapped[str | None] = mapped_column(String(64), index=True)
@@ -54,6 +62,13 @@ class LabelScan(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
 class LabelFieldReading(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "label_field_readings"
+    __table_args__ = (
+        UniqueConstraint(
+            "label_scan_id",
+            "field_name",
+            name="uq_label_field_readings_label_scan_field_name",
+        ),
+    )
 
     label_scan_id: Mapped[UUID] = mapped_column(
         ForeignKey("label_scans.id", ondelete="CASCADE"), nullable=False, index=True
@@ -67,4 +82,3 @@ class LabelFieldReading(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     corrected_by: Mapped[UUID | None]
 
     label_scan: Mapped[LabelScan] = relationship()
-
