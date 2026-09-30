@@ -7,7 +7,9 @@ export function App() {
   return (
     <main className="app-shell">
       <section className="hero" aria-labelledby="page-title">
-        <p className="eyebrow">LEITURA DE ETIQUETAS · PILOTO</p>
+        <p className="eyebrow">
+          LEITURA DE ETIQUETAS · {config ? 'OPERACIONAL' : 'PILOTO'}
+        </p>
         <h1 id="page-title">Paper Stock Control</h1>
         <p className="subtitle">
           Fotografe uma etiqueta Impress, Schattdecor ou Interprint e revise os dados
